@@ -1,0 +1,618 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>System One</title>
+<style>
+:root {
+  --bg: #f6f7f9; --panel: #ffffff; --text: #16181d; --muted: #646b78; --line: #e2e5ea;
+  --accent: #4f46e5; --accent-text: #ffffff; --ok: #15803d; --ok-bg: #e8f6ee; --bad: #b91c1c; --bad-bg: #fdecec;
+  --warn: #a16207; --chip: #eef0f4; --code: #f1f3f6;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f1115; --panel: #171a21; --text: #e6e8ec; --muted: #9aa1ad; --line: #2a2f3a;
+    --accent: #818cf8; --accent-text: #0f1115; --ok: #4ade80; --ok-bg: #12261a; --bad: #f87171; --bad-bg: #2a1414;
+    --warn: #facc15; --chip: #232833; --code: #11141a;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+main { max-width: 1080px; margin: 0 auto; padding: 24px 16px 64px; }
+h1 { font-size: 22px; margin: 0; }
+h2 { font-size: 16px; margin: 0 0 12px; }
+h3 { font-size: 14px; margin: 16px 0 8px; }
+.muted { color: var(--muted); }
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.spread { justify-content: space-between; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 720px) { .grid2 { grid-template-columns: 1fr; } }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; margin-top: 16px; }
+label { display: block; font-weight: 600; font-size: 12px; margin-bottom: 4px; }
+.hint { font-weight: 400; color: var(--muted); font-size: 12px; margin-top: 4px; }
+input, select, textarea { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--text); font: inherit; }
+textarea { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; min-height: 80px; }
+input[type=checkbox] { width: auto; }
+button { padding: 7px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--text); font: inherit; cursor: pointer; white-space: nowrap; }
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+button.danger { color: var(--bad); }
+button:disabled { opacity: .55; cursor: default; }
+.icon-btn { display: inline-flex; align-items: center; gap: 6px; }
+.chip { display: inline-block; padding: 1px 8px; border-radius: 999px; background: var(--chip); font-size: 12px; }
+.ok { color: var(--ok); } .bad { color: var(--bad); } .warn { color: var(--warn); }
+.badge-ok { background: var(--ok-bg); color: var(--ok); } .badge-bad { background: var(--bad-bg); color: var(--bad); }
+.card { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; margin-top: 8px; }
+.card .meta { min-width: 0; flex: 1 1 280px; }
+.card .url { font-family: ui-monospace, monospace; font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+table { width: 100%; border-collapse: collapse; }
+td, th { text-align: left; padding: 6px 4px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+th { font-size: 12px; color: var(--muted); font-weight: 600; }
+code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+pre { background: var(--code); border: 1px solid var(--line); border-radius: 8px; padding: 10px; overflow: auto; max-height: 360px; margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.q { border: 1px solid var(--line); border-radius: 8px; padding: 10px; margin-top: 8px; }
+.sub { display: grid; grid-template-columns: 1fr 2fr auto; gap: 6px; margin-top: 6px; }
+.sub1 { display: grid; grid-template-columns: 1fr auto; gap: 6px; margin-top: 6px; }
+.toast { position: fixed; right: 16px; bottom: 16px; padding: 10px 14px; border-radius: 8px; background: var(--text); color: var(--bg); max-width: 420px; display: none; }
+.empty { padding: 24px; text-align: center; color: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <div>
+    <div>
+      <h1>System One</h1>
+      <div class="muted">Decision nodes for <code>POST /v1/chat/completions</code> (or <code>/v1/systemone</code> where the host exposes it). Saved to <code>plugins.configs.systemone</code> in config.yaml.</div>
+    </div>
+    <div class="row" id="topActions" style="margin-top:12px"></div>
+  </div>
+  <div id="auth" class="panel" style="display:none"></div>
+  <div id="app"></div>
+</main>
+<div class="toast" id="toast"></div>
+<script>
+"use strict";
+const KEY_STORE = "systemone:management-key";
+const CONFIG_PATH = "/v8/management/config/plugins/configs/systemone";
+const API = "/v0/management/systemone";
+const QUESTION_TYPES = ["noul", "choice", "score"];
+
+const state = { key: "", config: null, presets: [], view: "list", editIndex: -1, form: null, checks: {}, fetched: null, example: null, testResult: null, busy: "" };
+
+// --- tiny DOM helper (text is always set via textContent) ---
+function h(tag, attrs, ...children) {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (v === undefined || v === null || v === false) continue;
+    if (k.startsWith("on")) el.addEventListener(k.slice(2), v);
+    else if (k === "value") el.value = v;
+    else if (k === "checked") el.checked = !!v;
+    else el.setAttribute(k, v === true ? "" : v);
+  }
+  for (const c of children.flat()) {
+    if (c === null || c === undefined || c === false) continue;
+    el.append(c instanceof Node ? c : document.createTextNode(String(c)));
+  }
+  return el;
+}
+function plusIcon() {
+  const ns = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(ns, "svg");
+  svg.setAttribute("viewBox", "0 0 24 24"); svg.setAttribute("width", "16"); svg.setAttribute("height", "16");
+  svg.setAttribute("fill", "none"); svg.setAttribute("stroke", "currentColor"); svg.setAttribute("stroke-width", "2.5");
+  svg.setAttribute("stroke-linecap", "round"); svg.setAttribute("aria-hidden", "true");
+  const path = document.createElementNS(ns, "path");
+  path.setAttribute("d", "M12 5v14M5 12h14");
+  svg.append(path);
+  return svg;
+}
+function toast(msg) {
+  const t = document.getElementById("toast");
+  t.textContent = msg; t.style.display = "block";
+  clearTimeout(toast.timer); toast.timer = setTimeout(() => (t.style.display = "none"), 3500);
+}
+function storageGet(k) { try { return localStorage.getItem(k) || ""; } catch { return ""; } }
+function storageSet(k, v) { try { v ? localStorage.setItem(k, v) : localStorage.removeItem(k); } catch {} }
+
+// The management UI (same origin, it embeds this page in an iframe) keeps its session key in
+// localStorage, XOR-obfuscated with a host/user-agent key behind "enc::v1::". Reuse it so the
+// page opens without asking for the key again.
+function deobfuscate(value) {
+  if (!value || !value.startsWith("enc::v1::")) return value;
+  const key = new TextEncoder().encode("cli-proxy-api-webui::secure-storage|" + location.host + "|" + navigator.userAgent);
+  const bin = atob(value.slice(9));
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i) ^ key[i % key.length];
+  return new TextDecoder().decode(out);
+}
+function managementSessionKey() {
+  try {
+    const auth = JSON.parse(deobfuscate(storageGet("cli-proxy-auth")) || "null");
+    const fromStore = auth && (auth.state ? auth.state.managementKey : auth.managementKey);
+    if (typeof fromStore === "string" && fromStore) return fromStore;
+  } catch {}
+  try {
+    const legacy = JSON.parse(deobfuscate(storageGet("managementKey")) || "null");
+    if (typeof legacy === "string" && legacy) return legacy;
+  } catch {}
+  return "";
+}
+
+async function call(method, path, body) {
+  const res = await fetch(path, {
+    method,
+    headers: { "Authorization": "Bearer " + state.key, "Content-Type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  const text = await res.text();
+  let data = null;
+  try { data = text ? JSON.parse(text) : null; } catch { data = { error: text }; }
+  if (res.status === 401 || res.status === 403) { if (state.config) showAuth("Management key rejected."); throw new Error("unauthorized"); }
+  if (!res.ok && !(res.status === 404 && path === CONFIG_PATH)) throw new Error((data && (data.message || data.error)) || ("HTTP " + res.status));
+  return { status: res.status, data };
+}
+
+// --- config load / save ---
+async function load() {
+  const [cfg, presets] = await Promise.all([call("GET", CONFIG_PATH), call("GET", API + "/presets").catch(() => ({ data: { presets: [] } }))]);
+  const c = cfg.status === 404 || !cfg.data ? {} : cfg.data;
+  state.config = { nodes: Array.isArray(c.nodes) ? c.nodes : [] };
+  state.presets = (presets.data && presets.data.presets) || [];
+  render();
+}
+async function saveNodes(nodes) {
+  await call("PUT", CONFIG_PATH + "/nodes", nodes);
+  state.config.nodes = nodes;
+}
+
+// --- node form model ---
+function presetOf(name) { return state.presets.find(p => p.preset === name) || null; }
+function toForm(n) {
+  const keys = [].concat(n["api-key"] ? [n["api-key"]] : [], n["api-keys"] || []);
+  const models = (n.models || []).map(m => typeof m === "string" ? { id: m, name: "" } : { id: m.id || "", name: m.name || "" });
+  return {
+    name: n.name || "", preset: n.preset || "", prefix: n.prefix || "", url: n.url || "",
+    keys: keys.length ? keys : [""], headers: Object.entries(n.headers || {}).map(([k, v]) => ({ k, v })),
+    proxy: n["proxy-url"] || "", disabled: !!n.disabled, models,
+  };
+}
+function fromForm(f) {
+  const n = {};
+  if (f.name.trim()) n.name = f.name.trim();
+  if (f.preset) n.preset = f.preset;
+  n.prefix = f.prefix.trim();
+  if (f.url.trim()) n.url = f.url.trim();
+  const keys = f.keys.map(k => k.trim()).filter(Boolean);
+  if (keys.length) n["api-keys"] = keys;
+  const headers = {};
+  for (const { k, v } of f.headers) if (k.trim()) headers[k.trim()] = v;
+  if (Object.keys(headers).length) n.headers = headers;
+  if (f.proxy.trim()) n["proxy-url"] = f.proxy.trim();
+  if (f.disabled) n.disabled = true;
+  const models = f.models.filter(m => m.id.trim()).map(m => m.name.trim() ? { id: m.id.trim(), name: m.name.trim() } : { id: m.id.trim() });
+  if (models.length) n.models = models;
+  return n;
+}
+function effectiveModels(f) {
+  if (f.models.length) return f.models;
+  const p = presetOf(f.preset);
+  return p ? p.models.map(m => ({ id: m.id, name: m.name || "" })) : [];
+}
+function validateForm(f, index) {
+  const prefix = f.prefix.trim() || f.preset;
+  if (!prefix) return "Prefix is required";
+  if (prefix.includes("/")) return "Prefix must not contain '/'";
+  const dup = state.config.nodes.some((n, i) => i !== index && (n.prefix || n.preset || "").toLowerCase() === prefix.toLowerCase());
+  if (dup) return "Prefix already used by another node";
+  if (!f.url.trim() && !f.preset) return "URL is required";
+  if (f.url.trim()) {
+    try { const u = new URL(f.url.trim()); if (u.protocol !== "http:" && u.protocol !== "https:") return "URL must start with http:// or https://"; }
+    catch { return "Invalid URL"; }
+  }
+  return "";
+}
+function nodeForApi(f) { const n = fromForm(f); if (!n.prefix) n.prefix = f.preset || "check"; return n; }
+
+// --- example payload (same shape as 9router's example card) ---
+function blankQuestion() { return { name: "", type: "noul", instructions: "", choices: [{ label: "", description: "" }], levels: [""] }; }
+function defaultExample() {
+  return { model: "", state: "Payment failed twice and the customer is asking for a refund.", questions: [{ ...blankQuestion(), name: "is_urgent", instructions: "Does this request require urgent attention?" }] };
+}
+function questionsToBody(questions) {
+  const body = {};
+  for (const q of questions) {
+    const name = q.name.trim();
+    if (!name || body[name]) continue;
+    const entry = { type: q.type, instructions: q.instructions.trim() };
+    if (q.type === "choice") {
+      const c = {};
+      for (const r of q.choices) if (r.label.trim() && !(r.label.trim() in c)) c[r.label.trim()] = r.description;
+      if (Object.keys(c).length) entry.criteria = c;
+    } else if (q.type === "score") {
+      const levels = q.levels.map(l => l.trim()).filter(Boolean);
+      if (levels.length) entry.criteria = levels;
+    }
+    body[name] = entry;
+  }
+  return body;
+}
+function questionsReady(questions) {
+  const named = questions.filter(q => q.name.trim());
+  if (!named.length) return "Add at least one named question";
+  if (new Set(named.map(q => q.name.trim())).size !== named.length) return "Question names must be unique";
+  for (const q of named) {
+    if (!q.instructions.trim()) return "Question \"" + q.name + "\" needs instructions";
+    if (q.type === "choice" && !q.choices.some(r => r.label.trim())) return "Choice question \"" + q.name + "\" needs at least one option";
+    if (q.type === "score" && !q.levels.some(l => l.trim())) return "Score question \"" + q.name + "\" needs at least one level";
+  }
+  return "";
+}
+function parseState(text) {
+  const t = text.trim();
+  if (t.startsWith("{") || t.startsWith("[")) { try { return JSON.parse(t); } catch {} }
+  return text;
+}
+function examplePayload(ex) { return { state: parseState(ex.state), questions: questionsToBody(ex.questions) }; }
+
+// --- views ---
+function render() {
+  renderTop();
+  const app = document.getElementById("app");
+  app.replaceChildren(state.view === "edit" ? renderEdit() : renderList());
+}
+function renderTop() {
+  const top = document.getElementById("topActions");
+  if (!state.config) { top.replaceChildren(); return; }
+  top.replaceChildren(...[
+    state.view === "list" ? h("button", { class: "primary icon-btn", onclick: () => openEdit(-1) }, plusIcon(), "Add System One node") : null,
+    state.keySource === "local" ? h("button", { onclick: () => { storageSet(KEY_STORE, ""); state.key = ""; showAuth(""); } }, "Forget key") : null,
+  ].filter(Boolean));
+}
+function latencyText(r) { return r && typeof r.latency_ms === "number" ? " - " + r.latency_ms + "ms" : ""; }
+function statusChip(prefix) {
+  const c = state.checks[prefix];
+  if (!c) return null;
+  if (c.pending) return h("span", { class: "chip" }, "checking…");
+  return c.valid ? h("span", { class: "chip badge-ok" }, "OK · " + c.method + latencyText(c)) : h("span", { class: "chip badge-bad", title: c.error || "" }, "Failed" + latencyText(c));
+}
+function renderList() {
+  const nodes = state.config.nodes;
+  const wrap = h("div", { class: "panel" }, h("h2", {}, "Nodes"));
+  if (!nodes.length) {
+    wrap.append(h("div", { class: "empty" }, "No System One nodes yet. Add one with its decision URL, e.g. http://127.0.0.1:8000/v1/systemone."));
+    return wrap;
+  }
+  nodes.forEach((n, i) => {
+    const f = toForm(n);
+    const prefix = f.prefix || f.preset;
+    const preset = presetOf(f.preset);
+    const models = effectiveModels(f);
+    const keyCount = f.keys.filter(Boolean).length || (preset && !preset.key_required ? 1 : 0);
+    wrap.append(h("div", { class: "card" },
+      h("div", { class: "meta" },
+        h("div", { class: "row" }, h("strong", {}, f.name || (preset && preset.name) || prefix), h("span", { class: "chip" }, prefix + "/…"),
+          f.preset ? h("span", { class: "chip" }, "preset: " + f.preset) : null,
+          f.disabled ? h("span", { class: "chip badge-bad" }, "disabled") : null, statusChip(prefix)),
+        h("div", { class: "url" }, f.url || (preset && preset.url) || ""),
+        h("div", { class: "muted" }, (models.length ? models.length + " model(s)" : "any model") + " · " + keyCount + " key(s)" + (f.proxy ? " · proxy " + f.proxy : ""))),
+      h("div", { class: "row" },
+        h("button", { onclick: () => checkSaved(i) }, "Check"),
+        h("button", { onclick: () => openEdit(i) }, "Open"),
+        h("button", { class: "danger", onclick: () => removeNode(i) }, "Delete"))));
+  });
+  return wrap;
+}
+// timedCheck runs a node check and records the round trip as seen from this page.
+async function timedCheck(body) {
+  const started = performance.now();
+  let result;
+  try { result = (await call("POST", API + "/check", body)).data || {}; }
+  catch (err) { result = { valid: false, error: err.message }; }
+  result.latency_ms = Math.round(performance.now() - started);
+  return result;
+}
+async function checkSaved(i) {
+  const f = toForm(state.config.nodes[i]);
+  const prefix = f.prefix || f.preset;
+  state.checks[prefix] = { pending: true }; render();
+  state.checks[prefix] = await timedCheck({ node: nodeForApi(f) });
+  render();
+}
+async function removeNode(i) {
+  const n = state.config.nodes[i];
+  if (!confirm("Delete System One node \"" + (n.name || n.prefix || n.preset) + "\" and its models?")) return;
+  try { await saveNodes(state.config.nodes.filter((_, j) => j !== i)); toast("Node deleted"); render(); } catch (err) { toast(err.message); }
+}
+function openEdit(i) {
+  state.view = "edit"; state.editIndex = i;
+  state.form = i >= 0 ? toForm(state.config.nodes[i]) : toForm({});
+  state.fetched = null; state.testResult = null; state.formCheck = null;
+  state.example = defaultExample();
+  render(); window.scrollTo(0, 0);
+}
+
+function field(label, input, hint) { return h("div", {}, h("label", {}, label), input, hint ? h("div", { class: "hint" }, hint) : null); }
+function bind(obj, key, attrs) {
+  return h("input", { ...attrs, value: obj[key], oninput: e => { obj[key] = e.target.value; } });
+}
+
+function renderEdit() {
+  const f = state.form;
+  const isNew = state.editIndex < 0;
+  const preset = presetOf(f.preset);
+  const root = h("div", {});
+  root.append(h("div", { class: "row", style: "margin-top:16px" },
+    h("button", { onclick: () => { state.view = "list"; render(); } }, "← All nodes"),
+    h("strong", {}, isNew ? "New System One node" : (f.name || f.prefix || f.preset))));
+
+  // Settings
+  const settings = h("div", { class: "panel" }, h("h2", {}, "Settings"));
+  const presetSelect = h("select", { onchange: e => {
+    f.preset = e.target.value;
+    const p = presetOf(f.preset);
+    if (p && !f.prefix) f.prefix = f.preset;
+    if (p && !f.name) f.name = p.name;
+    render();
+  } }, h("option", { value: "" }, "Custom node"), state.presets.map(p => h("option", { value: p.preset }, p.name + " (" + p.preset + ")")));
+  presetSelect.value = f.preset;
+  settings.append(
+    h("div", { class: "grid2" },
+      field("Type", presetSelect, preset ? "Preset fills URL, headers and models; any value below overrides it." : "Any server that implements the System One decision API."),
+      field("Name", bind(f, "name", { placeholder: preset ? preset.name : "Local server" })),
+      field("Prefix", bind(f, "prefix", { placeholder: f.preset || "local" }), "Clients call model \"<prefix>/<model>\"."),
+      field("URL", bind(f, "url", { placeholder: preset ? preset.url : "http://127.0.0.1:8000/v1/systemone" }), "Full decision endpoint. The runtime POSTs JSON to it as-is."),
+      field("Proxy URL", bind(f, "proxy", { placeholder: "empty = global proxy · direct · socks5://host:1080" })),
+      field("Status", h("label", { class: "row", style: "font-weight:500" }, h("input", { type: "checkbox", checked: !f.disabled, onchange: e => { f.disabled = !e.target.checked; } }), "Enabled"))));
+
+  const keys = h("div", {}, h("h3", {}, "API keys"), h("div", { class: "hint" }, preset && !preset.key_required ? "Optional: this lane works without a key." : "Optional. Sent as Bearer; several keys rotate and fall back on 401/402/403/429/5xx."));
+  f.keys.forEach((k, i) => keys.append(h("div", { class: "sub1" },
+    h("input", { type: "password", value: k, placeholder: "sk-…", autocomplete: "off", oninput: e => { f.keys[i] = e.target.value; } }),
+    h("button", { onclick: () => { f.keys.splice(i, 1); if (!f.keys.length) f.keys.push(""); render(); } }, "Remove"))));
+  keys.append(h("button", { style: "margin-top:6px", onclick: () => { f.keys.push(""); render(); } }, "Add key"));
+
+  const headers = h("div", {}, h("h3", {}, "Headers"), h("div", { class: "hint" }, "Extra request headers. Value {session} becomes a random id per request." + (preset && Object.keys(preset.headers || {}).length ? " Preset sends: " + Object.keys(preset.headers).join(", ") + "." : "")));
+  f.headers.forEach((row, i) => headers.append(h("div", { class: "sub" },
+    bind(row, "k", { placeholder: "Header" }), bind(row, "v", { placeholder: "Value" }),
+    h("button", { onclick: () => { f.headers.splice(i, 1); render(); } }, "Remove"))));
+  headers.append(h("button", { style: "margin-top:6px", onclick: () => { f.headers.push({ k: "", v: "" }); render(); } }, "Add header"));
+
+  const checkModel = h("input", { placeholder: "model id for Check (optional)", style: "max-width:260px" });
+  const fc = state.formCheck;
+  settings.append(h("div", { class: "grid2" }, keys, headers),
+    h("div", { class: "row", style: "margin-top:16px" },
+      h("button", { class: "primary", disabled: state.busy === "save", onclick: saveForm }, isNew ? "Create node" : "Save"),
+      checkModel,
+      h("button", { disabled: state.busy === "check", onclick: async () => {
+        const err = validateForm(f, state.editIndex); if (err) return toast(err);
+        state.busy = "check"; render();
+        state.formCheck = await timedCheck({ node: nodeForApi(f), model: checkModel.value.trim() });
+        state.busy = ""; render();
+      } }, state.busy === "check" ? "Checking…" : "Check"),
+      fc ? (fc.valid ? h("span", { class: "ok" }, "✓ OK · " + fc.method + latencyText(fc) + (fc.health && fc.health.device ? " · " + fc.health.device : "")) : h("span", { class: "bad" }, "✗ " + (fc.error || "Failed") + latencyText(fc))) : null));
+  root.append(settings);
+
+  root.append(renderModels(f), renderExample(f));
+  return root;
+}
+
+async function saveForm() {
+  const f = state.form;
+  const err = validateForm(f, state.editIndex);
+  if (err) return toast(err);
+  const nodes = state.config.nodes.slice();
+  const n = fromForm(f);
+  if (!n.prefix) delete n.prefix;
+  if (state.editIndex < 0) nodes.push(n); else nodes[state.editIndex] = n;
+  state.busy = "save"; render();
+  try {
+    await saveNodes(nodes);
+    if (state.editIndex < 0) state.editIndex = nodes.length - 1;
+    toast("Saved. CLIProxyAPI reloads the plugin config automatically.");
+  } catch (e) { toast(e.message); }
+  state.busy = ""; render();
+}
+
+function renderModels(f) {
+  const panel = h("div", { class: "panel" });
+  const prefix = f.prefix.trim() || f.preset || "<prefix>";
+  const presetModels = !f.models.length && presetOf(f.preset) ? presetOf(f.preset).models : null;
+  panel.append(h("div", { class: "row spread" }, h("h2", { style: "margin:0" }, "Models"),
+    h("div", { class: "row" },
+      h("button", { disabled: state.busy === "fetch", onclick: fetchFromApi }, state.busy === "fetch" ? "Fetching…" : "Fetch from API"))));
+  panel.append(h("div", { class: "hint" }, f.models.length ? "Only these models are accepted. Remember to Save." :
+    presetModels ? "Using the preset's models. Add models here to override them." : "No models listed: any model under this prefix is accepted. Add models to restrict and to list them in /v1/models."));
+
+  const rows = f.models.length ? f.models : (presetModels || []).map(m => ({ id: m.id, name: m.name || "", preset: true }));
+  if (rows.length) {
+    const table = h("table", {}, h("tr", {}, h("th", {}, "Model (client)"), h("th", {}, "Upstream id"), h("th", {}, "Display name"), h("th", {})));
+    rows.forEach((m, i) => table.append(h("tr", {},
+      h("td", {}, h("code", {}, prefix + "/" + m.id)),
+      h("td", {}, m.preset ? m.id : bind(m, "id", {})),
+      h("td", {}, m.preset ? (m.name || "") : bind(m, "name", { placeholder: "optional" })),
+      h("td", {}, h("div", { class: "row" },
+        h("button", { onclick: () => { navigator.clipboard && navigator.clipboard.writeText(prefix + "/" + m.id); toast("Copied " + prefix + "/" + m.id); } }, "Copy"),
+        m.preset ? null : h("button", { class: "danger", onclick: () => { f.models.splice(i, 1); render(); } }, "Remove"))))));
+    panel.append(table);
+  }
+  const add = { id: "", name: "" };
+  panel.append(h("div", { class: "sub", style: "margin-top:10px" },
+    bind(add, "id", { placeholder: "model id, e.g. Winnow-12B" }), bind(add, "name", { placeholder: "display name (optional)" }),
+    h("button", { onclick: () => {
+      if (!add.id.trim()) return toast("Model id is required");
+      if (f.models.some(m => m.id === add.id.trim())) return toast("Model already added");
+      f.models.push({ id: add.id.trim(), name: add.name.trim() }); render();
+    } }, "Add model")));
+
+  if (state.fetched) {
+    const box = h("div", { class: "q" });
+    if (state.fetched.error) box.append(h("div", { class: "bad" }, state.fetched.error));
+    else if (!state.fetched.models.length) box.append(h("div", { class: "muted" }, "The model API returned no models."));
+    else {
+      const picks = new Set(state.fetched.models.filter(m => !f.models.some(x => x.id === m.id)).map(m => m.id));
+      box.append(h("div", { class: "muted" }, state.fetched.models.length + " model(s) from " + state.fetched.url));
+      for (const m of state.fetched.models) {
+        const have = f.models.some(x => x.id === m.id);
+        box.append(h("label", { class: "row", style: "font-weight:400" },
+          h("input", { type: "checkbox", checked: !have, disabled: have, onchange: e => { e.target.checked ? picks.add(m.id) : picks.delete(m.id); } }),
+          h("code", {}, m.id), m.name ? h("span", { class: "muted" }, m.name) : null, have ? h("span", { class: "chip" }, "added") : null));
+      }
+      box.append(h("div", { class: "row", style: "margin-top:8px" },
+        h("button", { class: "primary", onclick: () => {
+          for (const m of state.fetched.models) if (picks.has(m.id)) f.models.push({ id: m.id, name: m.name || "" });
+          state.fetched = null; render(); toast("Models added. Remember to Save.");
+        } }, "Add selected"),
+        h("button", { onclick: () => { state.fetched = null; render(); } }, "Close")));
+    }
+    panel.append(box);
+  }
+  return panel;
+}
+async function fetchFromApi() {
+  const f = state.form;
+  const err = validateForm(f, state.editIndex); if (err) return toast(err);
+  state.busy = "fetch"; render();
+  const node = nodeForApi(f);
+  const base = (f.url || (presetOf(f.preset) || {}).url || "").replace(/\/+$/, "");
+  const url = base.endsWith("/models") ? base : base.replace(/\/systemone$/, "") + "/models";
+  try {
+    const d = (await call("POST", API + "/models", { node })).data;
+    state.fetched = d.error ? { error: d.error } : { models: d.models || [], url };
+  } catch (e) { state.fetched = { error: e.message }; }
+  state.busy = ""; render();
+}
+
+function renderExample(f) {
+  const ex = state.example;
+  const panel = h("div", { class: "panel" }, h("h2", {}, "Example"));
+  const models = effectiveModels(f);
+  if (!ex.model && models.length) ex.model = models[0].id;
+  const prefix = f.prefix.trim() || f.preset || "<prefix>";
+
+  const modelInput = models.length
+    ? h("select", { onchange: e => { ex.model = e.target.value; render(); } }, models.map(m => h("option", { value: m.id }, prefix + "/" + m.id + (m.name ? " — " + m.name : ""))))
+    : bind(ex, "model", { placeholder: "model id" });
+  if (models.length) modelInput.value = ex.model;
+
+  panel.append(h("div", { class: "grid2" },
+    field("Model", modelInput),
+    field("State", h("textarea", { value: ex.state, oninput: e => { ex.state = e.target.value; } }), "Plain text, or JSON object/array.")));
+
+  panel.append(h("h3", {}, "Questions"));
+  ex.questions.forEach((q, qi) => {
+    const typeSel = h("select", { onchange: e => { q.type = e.target.value; render(); } }, QUESTION_TYPES.map(t => h("option", { value: t }, t)));
+    typeSel.value = q.type;
+    const box = h("div", { class: "q" },
+      h("div", { class: "sub" }, bind(q, "name", { placeholder: "is_urgent" }), typeSel,
+        h("button", { onclick: () => { ex.questions.splice(qi, 1); if (!ex.questions.length) ex.questions.push(blankQuestion()); render(); } }, "Remove")),
+      h("div", { style: "margin-top:6px" }, bind(q, "instructions", { placeholder: "What should this question decide?" })));
+    if (q.type === "choice") {
+      q.choices.forEach((r, ri) => box.append(h("div", { class: "sub" }, bind(r, "label", { placeholder: "label" }), bind(r, "description", { placeholder: "description" }),
+        h("button", { onclick: () => { q.choices.splice(ri, 1); render(); } }, "Remove option"))));
+      box.append(h("button", { style: "margin-top:6px", onclick: () => { q.choices.push({ label: "", description: "" }); render(); } }, "Add option"));
+    } else if (q.type === "score") {
+      q.levels.forEach((l, li) => box.append(h("div", { class: "sub1" },
+        h("input", { value: l, placeholder: "level " + li, oninput: e => { q.levels[li] = e.target.value; } }),
+        h("button", { onclick: () => { q.levels.splice(li, 1); render(); } }, "Remove level"))));
+      box.append(h("button", { style: "margin-top:6px", onclick: () => { q.levels.push(""); render(); } }, "Add level"));
+    } else {
+      box.append(h("div", { class: "hint" }, "noul returns the probability that the answer is yes."));
+    }
+    panel.append(box);
+  });
+  panel.append(h("button", { style: "margin-top:8px", onclick: () => { ex.questions.push(blankQuestion()); render(); } }, "Add question"));
+
+  const request = { model: prefix + "/" + (ex.model || "<model>"), ...examplePayload(ex) };
+  const curl = "curl " + location.origin + "/v1/chat/completions \\\n  -H 'Authorization: Bearer <api-key>' \\\n  -H 'Content-Type: application/json' \\\n  -d '" + JSON.stringify(request).replace(/'/g, "'\\''") + "'";
+  const r = state.testResult;
+  panel.append(
+    h("div", { class: "row", style: "margin-top:12px" },
+      h("button", { class: "primary", disabled: state.busy === "test", onclick: sendTest }, state.busy === "test" ? "Sending…" : "Send"),
+      h("span", { class: "muted" }, "Sent through this node directly (unsaved changes included)."),
+      r ? h("span", { class: r.ok ? "ok" : "bad" }, (r.ok ? "✓ " : "✗ ") + r.status + (r.latency_ms !== undefined ? " · " + r.latency_ms + " ms" : "")) : null),
+    h("div", { class: "grid2", style: "margin-top:12px" },
+      h("div", {}, h("h3", {}, "Request"), h("pre", {}, JSON.stringify(request, null, 2)), h("h3", {}, "curl"), h("pre", {}, curl)),
+      h("div", {}, h("h3", {}, "Response"), h("pre", {}, r ? (r.ok ? JSON.stringify(r.response, null, 2) : r.error) : "—"))));
+  return panel;
+}
+async function sendTest() {
+  const f = state.form, ex = state.example;
+  const err = validateForm(f, state.editIndex) || questionsReady(ex.questions) || (!ex.model.trim() ? "Model is required" : "");
+  if (err) return toast(err);
+  state.busy = "test"; render();
+  try { state.testResult = (await call("POST", API + "/test", { node: nodeForApi(f), model: ex.model.trim(), payload: examplePayload(ex) })).data; }
+  catch (e) { state.testResult = { ok: false, status: 0, error: e.message }; }
+  state.busy = ""; render();
+}
+
+// --- auth ---
+function showAuth(msg) {
+  const box = document.getElementById("auth");
+  const input = h("input", { type: "password", placeholder: "Management key", autocomplete: "off" });
+  const go = async () => {
+    state.key = input.value.trim(); if (!state.key) return;
+    try { await load(); storageSet(KEY_STORE, state.key); state.keySource = "local"; box.style.display = "none"; renderTop(); } catch (e) { toast(e.message === "unauthorized" ? "Management key rejected." : e.message); }
+  };
+  input.addEventListener("keydown", e => { if (e.key === "Enter") go(); });
+  box.replaceChildren(h("h2", {}, "Management key"), h("div", { class: "muted" }, msg || "Enter the CLIProxyAPI management key to manage System One nodes."),
+    h("div", { class: "sub1" }, input, h("button", { class: "primary", onclick: go }, "Connect")));
+  box.style.display = "block";
+  document.getElementById("app").replaceChildren();
+  state.config = null; renderTop();
+}
+
+// When the panel does not remember the password, the key only lives in the parent page's memory.
+// Its API client sends it as an XHR Authorization header, so capture the header from the parent's
+// next request (triggered via its plugin refresh event) and keep it in the tab's sessionStorage.
+// The refresh remounts this iframe, so the reloaded page picks the key up from sessionStorage.
+const SESSION_KEY = "systemone:session-key";
+const CAPTURE_FLAG = "systemone:capture-attempted";
+function captureParentKey(timeoutMs) {
+  return new Promise(resolve => {
+    let win;
+    try { win = window.parent; if (!win || win === window || !win.XMLHttpRequest) return resolve(""); } catch { return resolve(""); }
+    const proto = win.XMLHttpRequest.prototype;
+    const original = proto.setRequestHeader;
+    let done = false;
+    const finish = key => {
+      if (done) return;
+      done = true;
+      if (proto.setRequestHeader === wrapper) proto.setRequestHeader = original;
+      resolve(key);
+    };
+    function wrapper(name, value) {
+      if (String(name).toLowerCase() === "authorization" && /^Bearer\s+\S/i.test(String(value))) {
+        const key = String(value).replace(/^Bearer\s+/i, "");
+        try { win.sessionStorage.setItem(SESSION_KEY, key); } catch {}
+        finish(key);
+      }
+      return original.apply(this, arguments);
+    }
+    proto.setRequestHeader = wrapper;
+    try { win.dispatchEvent(new win.Event("plugin-resources-refresh")); } catch {}
+    setTimeout(() => finish(""), timeoutMs);
+  });
+}
+function sessionGet(k) { try { return sessionStorage.getItem(k) || ""; } catch { return ""; } }
+function sessionSet(k, v) { try { v ? sessionStorage.setItem(k, v) : sessionStorage.removeItem(k); } catch {} }
+
+// Prefer the management UI session; fall back to a key entered here earlier, then ask.
+async function tryKey(key, source) {
+  if (!key) return false;
+  state.key = key; state.keySource = source;
+  try { await load(); return true; } catch (e) { if (e.message !== "unauthorized") { toast(e.message); return true; } }
+  return false;
+}
+async function start() {
+  if (await tryKey(managementSessionKey(), "session")) return;
+  if (await tryKey(sessionGet(SESSION_KEY), "session")) { sessionSet(CAPTURE_FLAG, ""); return; }
+  if (await tryKey(storageGet(KEY_STORE), "local")) return;
+  if (!sessionGet(CAPTURE_FLAG)) {
+    sessionSet(CAPTURE_FLAG, "1");
+    if (await tryKey(await captureParentKey(3000), "session")) { sessionSet(CAPTURE_FLAG, ""); return; }
+  }
+  showAuth("Open this page from the management panel while signed in, or enter the management key.");
+}
+start();
+</script>
+</body>
+</html>

@@ -1,0 +1,87 @@
+name: Build
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  PLUGIN_ID: systemone
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - run: test -z "$(gofmt -l .)"
+      - run: go vet ./...
+      - run: go test ./...
+
+  build:
+    name: Build ${{ matrix.goos }}/${{ matrix.goarch }}
+    needs: test
+    runs-on: ${{ matrix.runner }}
+    # Linux builds run in Debian bookworm so the library loads on glibc 2.36+,
+    # including the official CLIProxyAPI Docker image.
+    container: ${{ matrix.container }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { goos: linux, goarch: amd64, runner: ubuntu-24.04, ext: so, container: 'golang:1.26-bookworm' }
+          - { goos: linux, goarch: arm64, runner: ubuntu-24.04-arm, ext: so, container: 'golang:1.26-bookworm' }
+          - { goos: darwin, goarch: amd64, runner: macos-15-intel, ext: dylib }
+          - { goos: darwin, goarch: arm64, runner: macos-15, ext: dylib }
+          - { goos: windows, goarch: amd64, runner: windows-2025, ext: dll }
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        if: matrix.container == ''
+        with:
+          go-version-file: go.mod
+      - name: Build and package
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then VERSION="${GITHUB_REF_NAME#v}"; else VERSION="0.0.0-dev"; fi
+          ARCHIVE="${PLUGIN_ID}_${VERSION}_${{ matrix.goos }}_${{ matrix.goarch }}.zip"
+          mkdir -p dist
+          CGO_ENABLED=1 go build -trimpath -buildvcs=false -buildmode=c-shared \
+            -ldflags "-s -w -X main.pluginVersion=${VERSION}" -o "dist/${PLUGIN_ID}.${{ matrix.ext }}" .
+          go run .github/scripts/package.go "dist/${PLUGIN_ID}.${{ matrix.ext }}" "${ARCHIVE}"
+          echo "ARCHIVE=${ARCHIVE}" >> "${GITHUB_ENV}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ARCHIVE }}
+          path: |
+            ${{ env.ARCHIVE }}
+            ${{ env.ARCHIVE }}.sha256
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          cat dist/*.sha256 | sort -k2 > dist/checksums.txt
+          gh release create "${GITHUB_REF_NAME}" dist/*.zip dist/checksums.txt \
+            --repo "${GITHUB_REPOSITORY}" --verify-tag --title "${GITHUB_REF_NAME}" --generate-notes
