@@ -311,11 +311,49 @@ async function timedCheck(body) {
   result.latency_ms = Math.round(performance.now() - started);
   return result;
 }
+// Saved, enabled nodes are tested through CLIProxyAPI's own /v1/chat/completions (as 9router tests
+// models through its API), so Check and Send take the real routing path and are counted in usage.
+// Unsaved edits and disabled nodes are unknown to the proxy and are tested directly instead.
+let clientKey = null;
+async function proxyCall(body) {
+  if (clientKey === null) {
+    try { const keys = (await call("GET", "/v8/management/config/access/api-keys")).data; clientKey = Array.isArray(keys) && keys.length ? String(keys[0]) : ""; }
+    catch { clientKey = ""; }
+  }
+  const started = performance.now();
+  let res, data = null;
+  try {
+    res = await fetch("/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...(clientKey ? { "Authorization": "Bearer " + clientKey } : {}) },
+      body: JSON.stringify(body),
+    });
+    const text = await res.text();
+    try { data = text ? JSON.parse(text) : null; } catch { data = { error: text }; }
+  } catch (err) {
+    return { ok: false, status: 0, error: err.message, latency_ms: Math.round(performance.now() - started) };
+  }
+  const latency_ms = Math.round(performance.now() - started);
+  if (res.ok) return { ok: true, status: res.status, response: data, latency_ms };
+  const e = data && data.error;
+  return { ok: false, status: res.status, error: (e && (e.message || (typeof e === "string" ? e : JSON.stringify(e)))) || "HTTP " + res.status, latency_ms };
+}
+function savedAsIs(i, f) {
+  if (i < 0 || f.disabled) return false;
+  return JSON.stringify(fromForm(f)) === JSON.stringify(fromForm(toForm(state.config.nodes[i])));
+}
+// checkNode sends a probe decision through the proxy for saved nodes, else runs the direct check.
+async function checkNode(i, f, modelID) {
+  const model = modelID || (effectiveModels(f)[0] || {}).id;
+  if (!model || !savedAsIs(i, f)) return timedCheck({ node: nodeForApi(f), model: modelID });
+  const r = await proxyCall({ model: (f.prefix.trim() || f.preset) + "/" + model, state: "ping", questions: { probe: { type: "noul", instructions: "Is this a probe?" } } });
+  return r.ok ? { valid: true, method: "proxy", model, latency_ms: r.latency_ms } : { valid: false, error: r.error, latency_ms: r.latency_ms };
+}
 async function checkSaved(i) {
   const f = toForm(state.config.nodes[i]);
   const prefix = f.prefix || f.preset;
   state.checks[prefix] = { pending: true }; render();
-  state.checks[prefix] = await timedCheck({ node: nodeForApi(f) });
+  state.checks[prefix] = await checkNode(i, f, "");
   render();
 }
 async function removeNode(i) {
@@ -385,7 +423,7 @@ function renderEdit() {
       h("button", { disabled: state.busy === "check", onclick: async () => {
         const err = validateForm(f, state.editIndex); if (err) return toast(err);
         state.busy = "check"; render();
-        state.formCheck = await timedCheck({ node: nodeForApi(f), model: checkModel.value.trim() });
+        state.formCheck = await checkNode(state.editIndex, f, checkModel.value.trim());
         state.busy = ""; render();
       } }, state.busy === "check" ? "Checking…" : "Check"),
       fc ? (fc.valid ? h("span", { class: "ok" }, "✓ OK · " + fc.method + latencyText(fc) + (fc.health && fc.health.device ? " · " + fc.health.device : "")) : h("span", { class: "bad" }, "✗ " + (fc.error || "Failed") + latencyText(fc))) : null));
@@ -527,7 +565,7 @@ function renderExample(f) {
   panel.append(
     h("div", { class: "row", style: "margin-top:12px" },
       h("button", { class: "primary", disabled: state.busy === "test", onclick: sendTest }, state.busy === "test" ? "Sending…" : "Send"),
-      h("span", { class: "muted" }, "Sent through this node directly (unsaved changes included)."),
+      h("span", { class: "muted" }, "Saved nodes go through /v1/chat/completions and show up in Usage; unsaved changes are sent to the node directly."),
       r ? h("span", { class: r.ok ? "ok" : "bad" }, (r.ok ? "✓ " : "✗ ") + r.status + (r.latency_ms !== undefined ? " · " + r.latency_ms + " ms" : "")) : null),
     h("div", { class: "grid2", style: "margin-top:12px" },
       h("div", {}, h("h3", {}, "Request"), h("pre", {}, JSON.stringify(request, null, 2)), h("h3", {}, "curl"), h("pre", {}, curl)),
@@ -539,7 +577,11 @@ async function sendTest() {
   const err = validateForm(f, state.editIndex) || questionsReady(ex.questions) || (!ex.model.trim() ? "Model is required" : "");
   if (err) return toast(err);
   state.busy = "test"; render();
-  try { state.testResult = (await call("POST", API + "/test", { node: nodeForApi(f), model: ex.model.trim(), payload: examplePayload(ex) })).data; }
+  try {
+    state.testResult = savedAsIs(state.editIndex, f)
+      ? await proxyCall({ model: (f.prefix.trim() || f.preset) + "/" + ex.model.trim(), ...examplePayload(ex) })
+      : (await call("POST", API + "/test", { node: nodeForApi(f), model: ex.model.trim(), payload: examplePayload(ex) })).data;
+  }
   catch (e) { state.testResult = { ok: false, status: 0, error: e.message }; }
   state.busy = ""; render();
 }

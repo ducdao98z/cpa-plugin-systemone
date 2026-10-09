@@ -75,7 +75,7 @@ const (
 )
 
 // pluginVersion is set from the release tag with -ldflags "-X main.pluginVersion=...".
-var pluginVersion = "0.3.0"
+var pluginVersion = "0.4.0"
 
 var currentConfig atomic.Value
 

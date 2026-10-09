@@ -99,11 +99,16 @@ Opened from the management panel it reuses the panel's login; opened on its own
 (`/v0/resource/plugins/systemone/ui`) it asks for the management key and keeps it in this
 browser's local storage until you click **Forget key**.
 
-- Node list with status, Check (`/health`, then a probe decision when a key is set), Open, Delete.
+- Node list with status, Check, Open, Delete.
 - Add/edit node: preset or custom, name, prefix, URL, API keys, headers, proxy URL.
 - Models: add, rename, remove, or **Fetch from API** (`.../v1/models` beside the URL).
 - Example: build `noul` / `choice` / `score` questions, Send, and see the request, a `curl`, the
   response and the latency.
+
+Check and Send on a saved, enabled node go through `POST /v1/chat/completions` with the first client
+API key, like a real client, so they show up in usage statistics. Unsaved changes and disabled nodes
+are tested directly through the management routes below (Check: `/health`, then a probe decision
+when a key is set).
 
 Saving writes `plugins.configs.systemone.nodes` through `/v8/management/config`; the plugin reloads
 automatically.
