@@ -557,7 +557,7 @@ function render() {
     : "Loading…";
   put(ui.tabs, ...[["nodes", "Nodes"], ["hf", "Hugging Face"], ["settings", "Settings"]].map(([id, label]) =>
     h("button", { type: "button", role: "tab", class: "segment" + (state.tab === id ? " on" : ""), "aria-selected": String(state.tab === id), onclick: () => setTab(id) }, label)));
-  put(ui.body, ...(state.tab === "hf" ? renderHF() : state.tab === "settings" ? [tokenSection(), folderSection()] : [renderNodes()]));
+  put(ui.body, ...(state.tab === "hf" ? renderHF() : state.tab === "settings" ? renderSettings() : [renderNodes()]));
 }
 
 // ---------- modal (core Modal) ----------
@@ -1040,8 +1040,9 @@ function fitOf(params) {
   if (m.ram_total >= bytes) return [gpuMemory(m) ? "RAM only" : "CPU + RAM", "warn", "ram"];
   return ["Too large", "bad", "none"];
 }
-function renderHF() {
-  const hf = state.hf, m = hf.machine;
+function renderHF() { return [indexSection()]; }
+function renderSettings() {
+  const m = state.hf.machine;
   const out = [];
   if (m) {
     const gpuMem = gpuMemory(m);
@@ -1051,10 +1052,9 @@ function renderHF() {
       tile("GPU", m.gpus.length ? fmtBytes(gpuMem) : "None", m.gpus.length ? m.gpus.map(g => g.name).join(", ") : "No NVIDIA GPU found, so models run on the CPU", m.gpus.length ? "var(--viz-success)" : "var(--amber-color)"),
       tile("Disk free", m.disk_total ? fmtBytes(m.disk_free) : "—", m.disk_total ? `of ${fmtBytes(m.disk_total)} in ${m.disk_path}` : m.disk_path, m.disk_free && m.disk_free < 20 * 2 ** 30 ? "var(--viz-failure)" : "var(--viz-requests)", m.disk_total ? 100 * (1 - m.disk_free / m.disk_total) : undefined)));
   }
-  out.push(serversSection());
+  out.push(tokenSection(), folderSection(), serversSection());
   const rows = downloadRows();
   if (rows.length) out.push(downloadsSection(rows));
-  out.push(indexSection());
   return out;
 }
 
@@ -1205,7 +1205,7 @@ function indexSection() {
   const idx = hf.index;
   return section("Jev Decision Index", "Decision models on Hugging Face",
     h("span", {}, "Models from the ", h("a", { class: "link", href: (idx && idx.source) || "https://huggingface.co/spaces/multimodalart/jev-decision-index", target: "_blank", rel: "noopener" }, "Jev Decision Index"),
-      " that publish their weights, best score first. Score is the index's balanced skill score and latency is its median per decision. Memory is a rough estimate for the precision you pick (BF16 is the unquantized model, Q8 and Q4 are quantized builds), compared with the machine above. Most repositories hold the original BF16 weights; open a model to find its GGUF builds, which this page can download and run with llama.cpp.",
+      " that publish their weights, best score first. Score is the index's balanced skill score and latency is its median per decision. Memory is a rough estimate for the precision you pick (BF16 is the unquantized model, Q8 and Q4 are quantized builds), compared with this machine (shown on the Settings tab). Most repositories hold the original BF16 weights; open a model to find its GGUF builds, which this page can download and run with llama.cpp.",
       idx && idx.generated ? ` Index updated ${dateTimeFmt.format(new Date(idx.generated))}.` : ""),
     h("div", { class: "row wrap" }, search, h("div", { class: "row" }, h("span", { class: "hint" }, "Precision"), precision), filters,
       h("button", { type: "button", class: "btn", "aria-label": "Reload index", title: "Reload index", onclick: () => { hf.index = null; render(); loadHF("refresh"); } }, icon("refresh", 16))),
@@ -1430,7 +1430,7 @@ function openRepo(repo, info) {
           sel.busy = true; refresh();
           try {
             await call("POST", API + "/hf/download", { repo, files: picked.length === files.length ? [] : picked.map(f => f.path) });
-            toast("Download started", true); close(); setTab("hf"); loadHF(false);
+            toast("Download started", true); close(); setTab("settings"); loadHF(false);
           } catch (e) { toast(e.message); sel.busy = false; refresh(); }
         } }, sel.busy ? spinner(14) : icon("download", 14), !picked.length ? "Select files" : !todo ? "Already downloaded" : "Download " + fmtBytes(todo)));
     });

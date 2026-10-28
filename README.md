@@ -121,16 +121,19 @@ automatically.
 
 ### Settings tab
 
+- Machine: CPU, memory (the cgroup limit inside a container), NVIDIA GPUs (via `nvidia-smi`) and free
+  disk space in `models-dir`. This is the computer CLIProxyAPI runs on, where models are downloaded.
 - Hugging Face token: saved as `huggingface-token`; the page shows which account it belongs to.
 - Model folder: choose where downloads go (`models-dir`) by browsing the folders of the CLIProxyAPI
   machine. Inside a container the page lists the folders mounted from the host, since only those
   survive the container and can be handed to a model server. A host path is opened where it is
   mounted, and a folder outside the mounts is refused.
+- Model servers: progress while a model is set up, then its state, logs, stop/start and remove
+  (which also removes its node).
+- Downloaded models: progress of downloads started on the Hugging Face tab, stop, resume, Run and delete.
 
 ### Hugging Face tab
 
-- Machine: CPU, memory (the cgroup limit inside a container), NVIDIA GPUs (via `nvidia-smi`) and free
-  disk space in `models-dir`. This is the computer CLIProxyAPI runs on, where models are downloaded.
 - Jev Decision Index: models that publish weights, with rank, parameters, a rough memory estimate
   at the chosen precision (BF16, Q8 or Q4, plus 20%), score, latency and whether they fit the GPU, fit only in RAM or are
   too large. Filters show only the models that fit.
@@ -146,8 +149,6 @@ automatically.
   and sets non-causal attention when the original model's `config.json` declares it
   (`modeling_overrides.attention.full_attention: block_bidirectional`, as elephant-1 does). Models
   with a learned readout head are refused because llama.cpp cannot run them.
-- Model servers: progress while a model is set up, then its state, logs, stop/start and remove
-  (which also removes its node).
 
 Running models needs the Docker socket inside CLIProxyAPI's container, for example in
 `docker-compose.override.yml`:
