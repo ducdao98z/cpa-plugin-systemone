@@ -1260,7 +1260,7 @@ const JOB_STEPS = { preparing: "Adding decision metadata", pulling: "Downloading
 function runJobsActive() { return !!(state.run && state.run.jobs.some(j => JOB_STEPS[j.step])); }
 function serversSection() {
   const r = state.run;
-  const desc = "Downloaded GGUF models run in llama.cpp containers that this page starts through Docker. Each one is added as a node, so clients reach it as <name>/<name>.";
+  const desc = "Downloaded GGUF models run in llama.cpp containers that this page starts through Docker. Each one is added as a new node, or an existing node is pointed at it.";
   if (!r) return section("llama.cpp", "Model servers", desc, h("p", { class: "muted" }, spinner(14), " Loading…"));
   const jobs = new Map(r.jobs.map(j => [j.name, j]));
   const rows = r.runners.map(x => ({ name: x.name, runner: x, job: jobs.get(x.name) }));
@@ -1308,10 +1308,12 @@ async function showLogs(name) {
   try { pre.textContent = (await call("POST", API + "/run/logs", { name })).logs || "(no output)"; pre.scrollTop = pre.scrollHeight; }
   catch (e) { pre.textContent = e.message; }
 }
-// addRunnerNode saves the model server as a node, or points the node with the same prefix at it.
-async function addRunnerNode(name, url) {
+// addRunnerNode points the chosen node at the model server, keeping its models and aliases, or saves a new
+// node named after the server (an existing node with that prefix is reused).
+async function addRunnerNode(name, url, prefix) {
   const nodes = state.config.nodes.slice();
-  const i = nodes.findIndex(n => (n.prefix || n.preset || "").toLowerCase() === name.toLowerCase());
+  const target = (prefix || name).toLowerCase();
+  const i = nodes.findIndex(n => (n.prefix || n.preset || "").toLowerCase() === target);
   const node = i >= 0 ? { ...nodes[i], url } : { name: name + " (llama.cpp)", prefix: name, url, models: [{ id: name, name }] };
   if (i >= 0) nodes[i] = node; else nodes.push(node);
   await saveNodes(nodes);
@@ -1319,7 +1321,9 @@ async function addRunnerNode(name, url) {
 // openRun installs a downloaded GGUF model and starts it: decision metadata, llama.cpp container, node.
 function openRun(repo) {
   const sel = { files: null, error: "", busy: false };
-  const form = { file: "", mmproj: "", name: repo.split("/")[1].replace(/[-_.](decision[-_.])?gguf$/i, "").toLowerCase().replace(/[^a-z0-9_.-]/g, "-"), context: "32768", port: "" };
+  const form = { file: "", mmproj: "", name: repo.split("/")[1].replace(/[-_.](decision[-_.])?gguf$/i, "").toLowerCase().replace(/[^a-z0-9_.-]/g, "-"), context: "32768", port: "", node: null };
+  // A node that already serves a model with this id is the one to point at the new server.
+  const nodeFor = name => { const n = state.config.nodes.find(n => (n.models || []).some(m => (typeof m === "string" ? m : m.id) === name)); return n ? n.prefix || n.preset : ""; };
   const sheet = openSheet("Run with llama.cpp", repo, h("a", { class: "link", href: "https://huggingface.co/" + repo, target: "_blank", rel: "noopener" }, repo),
     (body, foot, close, refresh) => {
       if (sel.error) { put(body, h("p", { class: "formError" }, sel.error)); put(foot, h("button", { type: "button", class: "btn", onclick: close }, "Close")); return; }
@@ -1333,6 +1337,7 @@ function openRun(repo) {
         return;
       }
       const chosen = models.find(f => f.path === form.file);
+      const nodeChoice = form.node === null ? nodeFor(form.name.trim()) : form.node;
       const gpu = m && m.gpus.length ? m.gpus.reduce((n, g) => n + g.memory_free, 0) : 0;
       const select = (key, list, none) => h("select", { class: "input", onchange: e => { form[key] = e.target.value; refresh(); } },
         none ? h("option", { value: "", selected: !form[key] }, none) : null,
@@ -1342,7 +1347,11 @@ function openRun(repo) {
         r.docker_error ? h("p", { class: "formError" }, "Docker is not available to the plugin: " + r.docker_error) : null,
         field("Model file", select("file", models)),
         projs.length ? field("Vision projector", select("mmproj", projs, "None (text only)"), "Needed only for decisions that include images.") : null,
-        field("Name", bind(form, "name", { class: "input mono", placeholder: "elephant-1" }), "Used for the container (systemone-<name>), the node prefix and the model id, so clients ask for <name>/<name>."),
+        field("Name", bind(form, "name", { class: "input mono", placeholder: "elephant-1", onchange: () => { form.node = null; refresh(); } }), "The model name the server answers with, also used for its container (systemone-<name>)."),
+        field("Node", h("select", { class: "input", onchange: e => { form.node = e.target.value; refresh(); } },
+          h("option", { value: "", selected: !nodeChoice }, `New node ${form.name.trim() || "<name>"} (clients ask for ${form.name.trim() || "<name>"}/${form.name.trim() || "<name>"})`),
+          state.config.nodes.filter(n => n.prefix).map(n => h("option", { value: n.prefix, selected: nodeChoice === n.prefix }, `${n.prefix} · ${n.name || n.prefix} (keeps its models, URL ${n.url || "preset"})`))),
+          "An existing node keeps its models and aliases, so clients keep calling it the same way; only its URL changes to this server."),
         field("Context", bind(form, "context", { class: "input mono", inputmode: "numeric" }), "Tokens of context. 32768 matches what elephant-1 was trained with."),
         needPort ? field("Host port", bind(form, "port", { class: "input mono", inputmode: "numeric", placeholder: "3334" }), "CLIProxyAPI does not run in a Docker network here, so the model server listens on 127.0.0.1 at this port.") : null,
         h("div", { class: "specGrid" }, [
@@ -1356,8 +1365,9 @@ function openRun(repo) {
           sel.busy = true; refresh();
           try {
             const job = await call("POST", API + "/run/start", { repo, file: form.file, mmproj: form.mmproj, name: form.name.trim(), context: +form.context || 0, port: +form.port || 0 });
-            await addRunnerNode(job.name, job.url);
-            toast("Setting up " + job.name + "; it is added as a node", true); close(); render(); loadHF(false);
+            const nodePick = form.node === null ? nodeFor(job.name) : form.node;
+            await addRunnerNode(job.name, job.url, nodePick);
+            toast(`Setting up ${job.name}; node ${nodePick || job.name} now points at it`, true); close(); render(); loadHF(false);
           } catch (e) { toast(e.message); sel.busy = false; refresh(); }
         } }, sel.busy ? spinner(14) : null, "Install and run"));
     });

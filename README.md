@@ -135,7 +135,8 @@ automatically.
   matching the Precision switch (and its vision projector) is selected.
 - Run: starts a downloaded GGUF model in a llama.cpp server container
   (`ghcr.io/ggml-org/llama.cpp:server-cuda`, or `:server` without an NVIDIA GPU) and adds it as a node,
-  so clients ask for `<name>/<name>`. When the file has no System One decision metadata, the plugin
+  so clients ask for `<name>/<name>`, or points an existing node at it so its models and aliases keep
+  working (llama.cpp answers with the server name, so name it after the node's model id). When the file has no System One decision metadata, the plugin
   writes a copy (`*.systemone.gguf`) with the `systemone` chat template and the `openjev` readout,
   and sets non-causal attention when the original model's `config.json` declares it
   (`modeling_overrides.attention.full_attention: block_bidirectional`, as elephant-1 does). Models
