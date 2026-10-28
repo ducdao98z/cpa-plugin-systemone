@@ -4,6 +4,7 @@ import (
 	_ "embed"
 	"encoding/json"
 	"net/http"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -11,7 +12,7 @@ import (
 	"github.com/router-for-me/CLIProxyAPI/v8/sdk/pluginapi"
 )
 
-// ui is the System One console, served as a plugin resource. It holds no data itself:
+// ui is the Open Systemone console, served as a plugin resource. It holds no data itself:
 // every call it makes is authenticated with the management key the viewer enters.
 //
 //go:embed ui.html
@@ -37,14 +38,21 @@ type resourceRoute struct {
 func managementRegistration() map[string]any {
 	return map[string]any{
 		"routes": []managementRoute{
-			{Method: http.MethodGet, Path: managementBase + "/presets", Description: "Built-in System One lanes (url, headers, models)."},
-			{Method: http.MethodGet, Path: managementBase + "/nodes", Description: "Effective System One nodes after presets and validation."},
-			{Method: http.MethodPost, Path: managementBase + "/check", Description: "Check a node: GET /health, then a probe decision when a key is set."},
-			{Method: http.MethodPost, Path: managementBase + "/models", Description: "Fetch a node's upstream model list (.../v1/models)."},
-			{Method: http.MethodPost, Path: managementBase + "/test", Description: "Send a decision payload to a node."},
+			{Method: http.MethodGet, Path: managementBase + "/presets", Description: "The built-in System One lanes, with their URL, headers and models."},
+			{Method: http.MethodGet, Path: managementBase + "/nodes", Description: "The nodes the plugin actually uses, with presets filled in. Nodes with errors, such as a missing prefix or a bad URL, are left out and listed as warnings."},
+			{Method: http.MethodPost, Path: managementBase + "/check", Description: "Checks a node by calling its GET /health, then sends a small probe decision if the node has a key."},
+			{Method: http.MethodPost, Path: managementBase + "/models", Description: "Fetches the model list from a node's server (its /v1/models)."},
+			{Method: http.MethodPost, Path: managementBase + "/test", Description: "Sends a decision payload to a node and returns its answer."},
+			{Method: http.MethodGet, Path: managementBase + "/hf/status", Description: "Shows whether a Hugging Face token is set and which account it belongs to, the downloads of this session and the models already in models-dir."},
+			{Method: http.MethodGet, Path: managementBase + "/hf/machine", Description: "Describes the computer CLIProxyAPI runs on: CPU, memory, free disk space in models-dir and NVIDIA GPUs."},
+			{Method: http.MethodGet, Path: managementBase + "/hf/index", Description: "Lists the models of the Jev Decision Index that have weights on Hugging Face, with their size, score and latency. Add ?refresh=1 to reload it."},
+			{Method: http.MethodPost, Path: managementBase + "/hf/files", Description: "Lists the files of a Hugging Face model with their sizes."},
+			{Method: http.MethodPost, Path: managementBase + "/hf/download", Description: "Starts downloading a Hugging Face model, or some of its files, into models-dir. An interrupted download continues where it stopped."},
+			{Method: http.MethodPost, Path: managementBase + "/hf/cancel", Description: "Stops a running download. The part already downloaded is kept."},
+			{Method: http.MethodPost, Path: managementBase + "/hf/delete", Description: "Deletes a downloaded model from models-dir."},
 		},
 		"resources": []resourceRoute{
-			{Path: uiResourcePath, Menu: "System One", Description: "Add System One nodes, check them, fetch models and send test decisions."},
+			{Path: uiResourcePath, Menu: displayName, Description: "Add System One decision servers and test them, and download decision models from Hugging Face."},
 		},
 	}
 }
@@ -85,6 +93,9 @@ func handleManagement(cfg pluginConfig, req pluginapi.ManagementRequest, callbac
 		return jsonResponse(http.StatusOK, map[string]any{"presets": presetList()})
 	case managementBase + "/nodes":
 		return jsonResponse(http.StatusOK, map[string]any{"nodes": cfg.Nodes})
+	}
+	if strings.HasPrefix(path, managementBase+"/hf/") {
+		return handleHF(cfg, path, req)
 	}
 
 	var body nodeRequest
@@ -204,6 +215,63 @@ func testDecision(n node, modelID string, payload json.RawMessage, callbackID st
 		return map[string]any{"ok": false, "status": errRun.HTTPStatus, "error": errRun.Message, "latency_ms": elapsed}
 	}
 	return map[string]any{"ok": true, "status": http.StatusOK, "response": json.RawMessage(out), "latency_ms": elapsed}
+}
+
+type hfRequest struct {
+	Repo  string   `json:"repo"`
+	Files []string `json:"files"`
+}
+
+func handleHF(cfg pluginConfig, path string, req pluginapi.ManagementRequest) pluginapi.ManagementResponse {
+	switch path {
+	case managementBase + "/hf/status":
+		user, errUser := hfUser(cfg.HFToken)
+		out := map[string]any{"token_set": cfg.HFToken != "", "user": user, "models_dir": cfg.ModelsDir, "downloads": downloadList(), "local": localModels(cfg)}
+		if errUser != nil {
+			out["token_error"] = errUser.Error()
+		}
+		return jsonResponse(http.StatusOK, out)
+	case managementBase + "/hf/machine":
+		return jsonResponse(http.StatusOK, machine(cfg))
+	case managementBase + "/hf/index":
+		generated, models, errIndex := jevIndex(cfg.HFToken, req.Query.Get("refresh") != "")
+		if errIndex != nil {
+			return jsonResponse(http.StatusBadGateway, map[string]any{"error": errIndex.Error()})
+		}
+		return jsonResponse(http.StatusOK, map[string]any{"generated": generated, "source": hfBase + hfIndexSpace, "models": models})
+	}
+
+	var body hfRequest
+	if errUnmarshal := json.Unmarshal(req.Body, &body); errUnmarshal != nil || !validRepo(body.Repo) {
+		return jsonResponse(http.StatusBadRequest, map[string]any{"error": "a valid repo (owner/name) is required"})
+	}
+	switch path {
+	case managementBase + "/hf/files":
+		files, errList := listRepoFiles(cfg.HFToken, body.Repo)
+		if errList != nil {
+			return jsonResponse(http.StatusBadGateway, map[string]any{"error": errList.Error()})
+		}
+		dir := repoDir(cfg, body.Repo)
+		have := map[string]bool{}
+		for _, f := range files {
+			have[f.Path] = fileSize(filepath.Join(dir, filepath.FromSlash(f.Path))) == f.Size
+		}
+		return jsonResponse(http.StatusOK, map[string]any{"files": files, "downloaded": have, "path": dir})
+	case managementBase + "/hf/download":
+		d, errStart := startDownload(cfg, body.Repo, body.Files)
+		if errStart != nil {
+			return jsonResponse(http.StatusBadRequest, map[string]any{"error": errStart.Error()})
+		}
+		return jsonResponse(http.StatusOK, d)
+	case managementBase + "/hf/cancel":
+		return jsonResponse(http.StatusOK, map[string]any{"canceled": cancelDownload(body.Repo)})
+	case managementBase + "/hf/delete":
+		if errDelete := deleteModel(cfg, body.Repo); errDelete != nil {
+			return jsonResponse(http.StatusBadRequest, map[string]any{"error": errDelete.Error()})
+		}
+		return jsonResponse(http.StatusOK, map[string]any{"deleted": true})
+	}
+	return jsonResponse(http.StatusNotFound, map[string]any{"error": "unknown route"})
 }
 
 type errorString string

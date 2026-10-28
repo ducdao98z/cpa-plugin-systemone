@@ -89,6 +89,11 @@ func runDecision(cfg pluginConfig, original []byte, fallbackModel, callbackID st
 			if !json.Valid(resp.Body) {
 				return nil, pluginabi.NewError("upstream_error", "systemone upstream returned invalid JSON", http.StatusBadGateway)
 			}
+			for _, m := range n.Models {
+				if m.Alias != "" && strings.EqualFold(m.Alias, strings.TrimSpace(requested)) {
+					return withModel(resp.Body, m.Alias), nil
+				}
+			}
 			return resp.Body, nil
 		}
 		lastErr = pluginabi.NewError("upstream_error", upstreamErrorMessage(resp.Status, resp.Body), resp.Status)
@@ -99,7 +104,21 @@ func runDecision(cfg pluginConfig, original []byte, fallbackModel, callbackID st
 	return nil, lastErr
 }
 
-// staticModels lists every configured "prefix/model" so clients see them in /v1/models.
+// withModel sets the response "model" field so an aliased model never shows its upstream id.
+func withModel(body []byte, model string) []byte {
+	var obj map[string]json.RawMessage
+	if json.Unmarshal(body, &obj) != nil {
+		return body
+	}
+	obj["model"], _ = json.Marshal(model)
+	out, errMarshal := json.Marshal(obj)
+	if errMarshal != nil {
+		return body
+	}
+	return out
+}
+
+// staticModels lists every alias and every configured "prefix/model" so clients see them in /v1/models.
 func staticModels(cfg pluginConfig) []pluginapi.ModelInfo {
 	var out []pluginapi.ModelInfo
 	for _, n := range cfg.Nodes {
@@ -110,6 +129,12 @@ func staticModels(cfg pluginConfig) []pluginapi.ModelInfo {
 			name := m.Name
 			if name == "" {
 				name = m.ID
+			}
+			if m.Alias != "" {
+				out = append(out, pluginapi.ModelInfo{
+					ID: m.Alias, Object: "model", OwnedBy: n.Name, Type: "systemone",
+					DisplayName: name, Name: m.ID, UserDefined: true,
+				})
 			}
 			out = append(out, pluginapi.ModelInfo{
 				ID: n.Prefix + "/" + m.ID, Object: "model", OwnedBy: n.Name, Type: "systemone",

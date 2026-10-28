@@ -3,85 +3,336 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>System One</title>
+<title>Open Systemone</title>
 <style>
+/* Tokens, components and motion are copied from the CLIProxyAPI management panel (as in the Usage and API Key
+   Manager plugin pages), so the page sits in it natively. The theme mirrors the panel's <html data-theme>. */
 :root {
-  --bg: #f6f7f9; --panel: #ffffff; --text: #16181d; --muted: #646b78; --line: #e2e5ea;
-  --accent: #4f46e5; --accent-text: #ffffff; --ok: #15803d; --ok-bg: #e8f6ee; --bad: #b91c1c; --bad-bg: #fdecec;
-  --warn: #a16207; --chip: #eef0f4; --code: #f1f3f6;
+  --bg-secondary: #faf9f5; --bg-primary: #f0eee8; --bg-tertiary: #e9e6df; --bg-hover: var(--bg-tertiary);
+  --floating-surface: #fffdf9; --floating-shadow: 0 12px 26px #00000024;
+  --text-primary: #2d2a26; --text-secondary: #6d6760; --text-tertiary: #a29c95; --text-quaternary: #c0bab3;
+  --border-color: #e3e1db; --border-primary: #d5d2cb; --border-hover: #cecac4;
+  --primary-color: #8b8680; --primary-active: #726d67; --amber-color: #d97706;
+  --success-badge-bg: #d1fae5; --success-badge-text: #065f46; --success-badge-border: #6ee7b7;
+  --failure-badge-bg: #c6574624; --failure-badge-text: #8a3a30; --failure-badge-border: #c6574659;
+  --shadow: 0 1px 2px 0 #00000014; --shadow-lg: 0 10px 18px -3px #0000001a;
+  --glass-bg: color-mix(in srgb, var(--bg-primary) 82%, transparent);
+  --glass-border: color-mix(in srgb, var(--border-color) 60%, transparent);
+  --viz-success: #10b981; --viz-failure: #c65746; --viz-requests: #64748b;
+  --ease-out-strong: cubic-bezier(.23, 1, .32, 1); --dur-press: .16s; --dur-hover: .2s;
+  --mono: ui-monospace, "SF Mono", "Cascadia Mono", "JetBrains Mono", "Fira Code", Menlo, Consolas, "Liberation Mono", monospace;
+  color-scheme: light;
 }
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #0f1115; --panel: #171a21; --text: #e6e8ec; --muted: #9aa1ad; --line: #2a2f3a;
-    --accent: #818cf8; --accent-text: #0f1115; --ok: #4ade80; --ok-bg: #12261a; --bad: #f87171; --bad-bg: #2a1414;
-    --warn: #facc15; --chip: #232833; --code: #11141a;
-  }
+[data-theme=dark] {
+  --bg-secondary: #151412; --bg-primary: #1d1b18; --bg-tertiary: #262320; --bg-hover: #2e2a26;
+  --floating-surface: #2a2723; --floating-shadow: 0 14px 30px #0006;
+  --text-primary: #f6f4f1; --text-secondary: #c9c3bb; --text-tertiary: #9c958d; --text-quaternary: #6f6962;
+  --border-color: #3a3530; --border-primary: #4a453f; --border-hover: #5a544d;
+  --primary-active: #a6a099; --amber-color: #f59e0b;
+  --success-badge-bg: #064e3b4d; --success-badge-text: #6ee7b7; --success-badge-border: #059669;
+  --failure-badge-bg: #c657463d; --failure-badge-text: #f1b0a6; --failure-badge-border: #c6574680;
+  --shadow: 0 1px 3px 0 #0000004d; --shadow-lg: 0 10px 15px -3px #0000004d;
+  --glass-border: color-mix(in srgb, var(--border-color) 55%, transparent);
+  --viz-success: #0fae78; --viz-failure: #cf4b3a; --viz-requests: #94a3b8;
+  color-scheme: dark;
 }
-* { box-sizing: border-box; }
-body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
-main { max-width: 1080px; margin: 0 auto; padding: 24px 16px 64px; }
-h1 { font-size: 22px; margin: 0; }
-h2 { font-size: 16px; margin: 0 0 12px; }
-h3 { font-size: 14px; margin: 16px 0 8px; }
-.muted { color: var(--muted); }
-.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-.spread { justify-content: space-between; }
-.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-@media (max-width: 720px) { .grid2 { grid-template-columns: 1fr; } }
-.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; margin-top: 16px; }
-label { display: block; font-weight: 600; font-size: 12px; margin-bottom: 4px; }
-.hint { font-weight: 400; color: var(--muted); font-size: 12px; margin-top: 4px; }
-input, select, textarea { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--text); font: inherit; }
-textarea { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; min-height: 80px; }
-input[type=checkbox] { width: auto; }
-button { padding: 7px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--text); font: inherit; cursor: pointer; white-space: nowrap; }
-button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
-button.danger { color: var(--bad); }
-button:disabled { opacity: .55; cursor: default; }
-.icon-btn { display: inline-flex; align-items: center; gap: 6px; }
-.chip { display: inline-block; padding: 1px 8px; border-radius: 999px; background: var(--chip); font-size: 12px; }
-.ok { color: var(--ok); } .bad { color: var(--bad); } .warn { color: var(--warn); }
-.badge-ok { background: var(--ok-bg); color: var(--ok); } .badge-bad { background: var(--bad-bg); color: var(--bad); }
-.card { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; margin-top: 8px; }
-.card .meta { min-width: 0; flex: 1 1 280px; }
-.card .url { font-family: ui-monospace, monospace; font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
-table { width: 100%; border-collapse: collapse; }
-td, th { text-align: left; padding: 6px 4px; border-bottom: 1px solid var(--line); vertical-align: middle; }
-th { font-size: 12px; color: var(--muted); font-weight: 600; }
-code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
-pre { background: var(--code); border: 1px solid var(--line); border-radius: 8px; padding: 10px; overflow: auto; max-height: 360px; margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
-.q { border: 1px solid var(--line); border-radius: 8px; padding: 10px; margin-top: 8px; }
-.sub { display: grid; grid-template-columns: 1fr 2fr auto; gap: 6px; margin-top: 6px; }
-.sub1 { display: grid; grid-template-columns: 1fr auto; gap: 6px; margin-top: 6px; }
-.toast { position: fixed; right: 16px; bottom: 16px; padding: 10px 14px; border-radius: 8px; background: var(--text); color: var(--bg); max-width: 420px; display: none; }
-.empty { padding: 24px; text-align: center; color: var(--muted); }
+[data-theme=white] {
+  --bg-secondary: #fff; --bg-primary: #fff; --bg-tertiary: #f6f6f6; --floating-surface: #fff; --floating-shadow: 0 12px 26px #0000001f;
+  --border-color: #e5e5e5; --border-primary: #d9d9d9; --border-hover: #ccc;
+}
+
+*, ::before, ::after { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { margin: 0; }
+h1, h2, h3, p { margin: 0; }
+body { min-height: 100vh; background: var(--bg-secondary); color: var(--text-primary); font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif; -webkit-font-smoothing: antialiased; transition: background-color .3s, color .3s; }
+body.modal-open { overflow: hidden; }
+button, input, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+button:disabled { cursor: not-allowed; }
+svg.i { display: inline-block; flex-shrink: 0; fill: currentColor; vertical-align: middle; }
+.mono { font-family: var(--mono); }
+.num { font-variant-numeric: tabular-nums; }
+.muted { color: var(--text-tertiary); }
+.r { text-align: right; }
+.spin { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ambient wash + grid behind the masthead (core dashboard) */
+.ambient { position: absolute; top: 0; left: 0; right: 0; z-index: 0; height: 520px; overflow: hidden; pointer-events: none; }
+.washTop { position: absolute; top: 0; left: 50%; width: min(960px, 96vw); height: 440px; transform: translateX(-50%); background: radial-gradient(ellipse 75% 70% at 50% 18%, color-mix(in srgb, var(--viz-success) 10%, transparent), transparent 70%); -webkit-mask-image: linear-gradient(#0000, #000 26% 62%, #0000); mask-image: linear-gradient(#0000, #000 26% 62%, #0000); }
+.gridWash { position: absolute; inset: 0; opacity: .24; background-image: linear-gradient(to right, var(--border-color) 1px, transparent 1px), linear-gradient(to bottom, var(--border-color) 1px, transparent 1px); background-size: 72px 72px;
+  -webkit-mask-image: linear-gradient(#0000, #000 48px), radial-gradient(70% 60% at 50% 0, #000 0%, #0000 78%); -webkit-mask-composite: source-in;
+  mask-image: linear-gradient(#0000, #000 48px), radial-gradient(70% 60% at 50% 0, #000 0%, #0000 78%); mask-composite: intersect; }
+
+.page { position: relative; z-index: 1; width: 100%; max-width: 1120px; margin: 0 auto; padding: 40px 24px 80px; }
+.embedded .page { padding-top: 88px; } /* clear the panel's floating toolbar */
+.content { display: flex; flex-direction: column; gap: clamp(36px, 5vh, 56px); min-width: 0; }
+
+/* masthead */
+.hero { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 20px 32px; }
+.heroCopy { display: flex; flex-direction: column; align-items: flex-start; gap: 14px; min-width: 0; }
+.eyebrow { display: inline-flex; align-items: center; gap: 7px; color: var(--text-tertiary); font: 700 11px/1.2 var(--mono); letter-spacing: .12em; text-transform: uppercase; }
+.eyebrow::before { content: "▍"; color: var(--viz-success); font-size: 12px; line-height: 1; }
+.heroTitle { color: var(--text-primary); font-size: clamp(32px, 4.2vw, 50px); font-weight: 700; line-height: 1.05; letter-spacing: -.035em; text-wrap: balance; }
+.heroPeriod { margin-inline-start: clamp(3px, .06em, 6px); color: var(--viz-success); }
+.heroMeta { color: var(--text-secondary); font: 13px/1.5 var(--mono); letter-spacing: .02em; font-variant-numeric: tabular-nums; }
+.heroActions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* segmented control (ModeSwitch) */
+.segmented { display: inline-flex; flex-shrink: 0; align-items: center; gap: 2px; max-width: 100%; padding: 2px; overflow-x: auto; border: 1px solid var(--border-color); border-radius: 9999px; background: var(--bg-tertiary); scrollbar-width: none; }
+.segmented::-webkit-scrollbar { display: none; }
+.segment { padding: 5px 12px; border: 0; border-radius: 9999px; background: none; color: var(--text-secondary); font-size: 12px; font-weight: 550; line-height: 1.3; white-space: nowrap;
+  transition: color var(--dur-hover) var(--ease-out-strong), background-color var(--dur-hover) var(--ease-out-strong), box-shadow var(--dur-hover) var(--ease-out-strong), transform var(--dur-press) var(--ease-out-strong); }
+.segment:hover:not(.on) { color: var(--text-primary); }
+.segment:active { transform: scale(.96); }
+.segment.on { background: var(--floating-surface); color: var(--text-primary); font-weight: 650; box-shadow: 0 1px 3px #0000001f, 0 1px 2px #00000014; }
+.segment:focus-visible, .btn:focus-visible, .iconBtn:focus-visible { outline: 2px solid var(--primary-color); outline-offset: 2px; }
+
+/* stat tiles + meter */
+.statsRow { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+.statTile { display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 22px 24px; border: 1px solid var(--border-color); border-radius: 14px; background: color-mix(in srgb, var(--bg-primary) 82%, transparent); transition: border-color .15s; }
+.statTile::before { content: ""; width: 28px; height: 3px; margin-bottom: 2px; border-radius: 9999px; background: var(--tile-accent, var(--border-hover)); }
+.statTile:hover { border-color: var(--border-hover); }
+.statLabel { color: var(--text-secondary); font-size: 12px; font-weight: 600; }
+.statValue { overflow: hidden; color: var(--text-primary); font: 600 28px/1.1 var(--mono); letter-spacing: -.01em; font-variant-numeric: tabular-nums; text-overflow: ellipsis; white-space: nowrap; }
+.statHint { color: var(--text-tertiary); font-size: 12px; line-height: 1.45; }
+.meter { width: 100%; height: 6px; margin: 4px 0 2px; overflow: hidden; border-radius: 9999px; background: color-mix(in srgb, var(--meter-fill) 16%, transparent); }
+.meter > i { display: block; height: 100%; border-radius: 9999px; background: var(--meter-fill); transition: width .36s var(--ease-out-strong); }
+
+/* sections */
+.section { display: flex; flex-direction: column; gap: 22px; min-width: 0; }
+.sectionHead { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 14px 24px; }
+.sectionCopy { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.sectionTitle { font-size: clamp(22px, 2.6vw, 30px); font-weight: 650; line-height: 1.18; letter-spacing: -.02em; text-wrap: balance; }
+.sectionDescription { max-width: 72ch; color: var(--text-secondary); font-size: 14px; line-height: 1.6; }
+.panel { display: flex; flex-direction: column; gap: 16px; min-width: 0; padding: clamp(20px, 2.2vw, 26px); border: 1px solid var(--border-color); border-radius: 16px; background: color-mix(in srgb, var(--bg-primary) 82%, transparent); }
+.subTitle { color: var(--text-primary); font-size: 14px; font-weight: 650; }
+.chartEmpty { display: grid; place-items: center; border: 1px dashed var(--border-primary); border-radius: 12px; background: color-mix(in srgb, var(--bg-secondary) 60%, transparent); color: var(--text-tertiary); font-size: 13px; }
+
+/* badges */
+.pill { display: inline-flex; align-items: center; padding: 1px 8px; border: 1px solid var(--success-badge-border); border-radius: 9999px; background: var(--success-badge-bg); color: var(--success-badge-text); font: 700 10.5px/1.6 var(--mono); letter-spacing: .04em; text-transform: uppercase; white-space: nowrap; }
+.pill.bad { border-color: var(--failure-badge-border); background: var(--failure-badge-bg); color: var(--failure-badge-text); }
+.pill.warn { border-color: color-mix(in srgb, var(--amber-color) 45%, transparent); background: color-mix(in srgb, var(--amber-color) 12%, transparent); color: var(--amber-color); }
+.pill.muted { border-color: var(--border-color); background: transparent; color: var(--text-tertiary); }
+
+/* buttons (core primaryAction / ghostAction / danger) + inputs */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 36px; padding: 0 16px; border: 1px solid var(--border-color); border-radius: 9999px; background: var(--bg-primary); color: var(--text-primary); font-size: 13px; font-weight: 600; white-space: nowrap; text-decoration: none;
+  transition: transform var(--dur-press) var(--ease-out-strong), background-color .15s, border-color .15s, box-shadow var(--dur-hover) var(--ease-out-strong), color .15s; }
+.btn:hover:not(:disabled) { border-color: var(--border-hover); background: var(--bg-tertiary); }
+.btn:active:not(:disabled) { transform: scale(.97); }
+.btn:disabled { opacity: .45; }
+.btn.sm { height: 28px; padding: 0 11px; font-size: 12px; }
+.btn.primary { border-color: transparent; background: var(--text-primary); color: var(--bg-secondary); }
+.btn.primary:hover:not(:disabled) { background: color-mix(in srgb, var(--text-primary) 86%, var(--bg-secondary)); box-shadow: 0 12px 26px color-mix(in srgb, var(--text-primary) 22%, transparent); }
+.btn.ghost { border-color: transparent; background: none; color: var(--text-secondary); }
+.btn.ghost:hover:not(:disabled) { background: color-mix(in srgb, var(--bg-tertiary) 60%, transparent); color: var(--text-primary); }
+.btn.danger { border-color: #c65746; background: #c65746; color: #fff; }
+.btn.danger:hover:not(:disabled) { border-color: #b94a39; background: #b94a39; }
+.btn.ghost.dangerText { color: var(--failure-badge-text); }
+.iconBtn { display: inline-grid; width: 26px; height: 26px; flex: none; padding: 0; place-items: center; border: 0; border-radius: 7px; background: none; color: var(--text-tertiary); transition: background-color .15s, color .15s; }
+.iconBtn:hover { background: var(--bg-tertiary); color: var(--text-primary); }
+.field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.field > label { color: var(--text-primary); font-size: 13px; font-weight: 600; }
+.hint { color: var(--text-secondary); font-size: 12.5px; line-height: 1.5; }
+.row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.row > .input { flex: 1 1 auto; }
+.input { width: 100%; min-width: 0; height: 40px; padding: 0 12px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-primary); box-shadow: var(--shadow); color: var(--text-primary); font-size: 13px; font-weight: 500; transition: border-color .15s, box-shadow .15s; }
+.input:hover { border-color: var(--border-hover); }
+.input:focus { outline: none; border-color: var(--primary-color); box-shadow: var(--shadow), 0 0 0 3px #8b86802e; }
+.input[readonly] { background: var(--bg-tertiary); }
+.input.mono { font: 500 12.5px var(--mono); }
+select.input { width: auto; padding-right: 34px; appearance: none; cursor: pointer; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238b8680' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; }
+.formError { padding: 9px 12px; border: 1px solid var(--failure-badge-border); border-radius: 8px; background: var(--failure-badge-bg); color: var(--failure-badge-text); font-size: 13px; }
+.usageNote { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; padding: 10px 12px; border: 1px solid var(--border-color); border-radius: 10px; background: var(--bg-secondary); color: var(--text-secondary); font-size: 13px; }
+.usageNote b { color: var(--text-primary); font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+/* tables (core Table) */
+.tableWrap { overflow: hidden; border: 1px solid var(--border-color); border-radius: 12px; background: var(--bg-primary); }
+.xscroll { overflow-x: auto; }
+.table { width: 100%; border-collapse: separate; border-spacing: 0; color: var(--text-primary); font-size: 13px; }
+.table thead th { padding: 10px 14px; border-bottom: 1px solid var(--border-color); background: var(--bg-tertiary); color: var(--text-secondary); font-size: 12px; font-weight: 500; text-align: left; white-space: nowrap; }
+.table thead th.r { text-align: right; }
+.table td { padding: 11px 14px; border-bottom: 1px solid var(--border-color); vertical-align: middle; white-space: nowrap; }
+.table tbody tr:last-child td { border-bottom: 0; }
+.table tbody tr td { transition: background-color .15s; }
+.table tbody tr.click { cursor: pointer; }
+.table tbody tr:hover td { background: color-mix(in srgb, var(--bg-tertiary) 50%, transparent); }
+.table td.soft { color: var(--text-secondary); }
+.table td.empty { padding: 36px 14px; color: var(--text-tertiary); text-align: center; white-space: normal; }
+.keyCell { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.keyCell b { overflow: hidden; max-width: 260px; font-weight: 650; text-overflow: ellipsis; }
+.keyCell b.unnamed { color: var(--text-tertiary); font-weight: 500; font-style: italic; }
+.keyLine { display: flex; align-items: center; gap: 2px; color: var(--text-tertiary); font: 11.5px/1.4 var(--mono); }
+.sub { display: block; color: var(--text-tertiary); font-size: 11.5px; }
+/* Every column of the key list fits its content and they share the spare width equally, so the gaps match. */
+.table.keys th { width: 1%; }
+.usageCell { display: flex; flex-direction: column; gap: 2px; }
+.usageCell .meter { width: 150px; margin: 2px 0 0; }
+.actions { display: flex; justify-content: flex-end; gap: 2px; }
+.modelsCell { display: inline-block; max-width: 220px; overflow: hidden; color: var(--text-secondary); font-size: 12px; text-overflow: ellipsis; vertical-align: middle; }
+.tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.tag { display: inline-flex; align-items: center; gap: 2px; padding: 2px 2px 2px 9px; border: 1px solid var(--border-color); border-radius: 9999px; background: var(--bg-secondary); color: var(--text-primary); font: 12px/1.5 var(--mono); }
+.tag .iconBtn { width: 20px; height: 20px; border-radius: 9999px; }
+
+
+/* sheet (core Sheet) */
+.sheetOverlay { position: fixed; inset: 0; z-index: 2000; display: flex; justify-content: flex-end; background: #00000073; -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px); animation: fadeIn .28s cubic-bezier(.16, 1, .3, 1) both; }
+.sheet { position: relative; display: flex; width: min(680px, 100vw); height: 100%; flex-direction: column; border-left: 1px solid var(--border-color); background: var(--bg-primary); box-shadow: -8px 0 32px #00000029, var(--floating-shadow); outline: none; animation: sheetSlideIn .32s cubic-bezier(.16, 1, .3, 1) both; }
+.sheetOverlay.closing { animation: fadeOut .28s cubic-bezier(.4, 0, .2, 1) both; }
+.sheetOverlay.closing .sheet { animation: sheetSlideOut .28s cubic-bezier(.32, 0, .67, 0) both; }
+@keyframes fadeIn { from { opacity: 0; } }
+@keyframes fadeOut { to { opacity: 0; } }
+@keyframes sheetSlideIn { from { transform: translateX(100%); } }
+@keyframes sheetSlideOut { to { transform: translateX(100%); } }
+.sheetHead { display: flex; flex-direction: column; gap: 4px; padding: 20px 56px 20px 24px; border-bottom: 1px solid var(--border-color); }
+.sheetEyebrow { color: var(--text-secondary); font-size: 11px; font-weight: 500; letter-spacing: .05em; text-transform: uppercase; }
+.sheetTitle { font-size: 18px; font-weight: 650; line-height: 1.35; overflow-wrap: anywhere; }
+.sheetDesc { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; color: var(--text-secondary); font: 12.5px var(--mono); }
+.sheetBody { display: flex; flex: 1; flex-direction: column; gap: 22px; padding: 24px; overflow-y: auto; }
+.closeBtn { position: absolute; top: 14px; right: 14px; display: grid; width: 32px; height: 32px; place-items: center; border: 0; border-radius: 8px; background: none; color: var(--text-secondary); transition: background-color .15s, color .15s; }
+.closeBtn:hover { background: var(--bg-tertiary); color: var(--text-primary); }
+.specGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 28px; }
+.specRow { display: flex; min-width: 0; align-items: baseline; justify-content: space-between; gap: 16px; padding: 9px 0; border-bottom: 1px solid var(--border-color); }
+.specLabel { flex: none; color: var(--text-secondary); font-size: 13px; }
+.specValue { min-width: 0; color: var(--text-primary); font-size: 13px; font-weight: 600; text-align: right; overflow-wrap: anywhere; }
+.block { display: flex; flex-direction: column; gap: 10px; }
+.pager { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; color: var(--text-secondary); font-size: 12.5px; }
+.pager b { color: var(--text-primary); font-weight: 600; font-variant-numeric: tabular-nums; }
+/* the panel's floating toolbar covers the top right of this frame */
+.embedded .sheet { padding-top: 76px; }
+.embedded .closeBtn { top: 90px; }
+
+/* modal (core Modal) */
+.modal-overlay { position: fixed; inset: 0; z-index: 2100; display: flex; align-items: center; justify-content: center; padding: 24px; background: #00000059; animation: .25s ease-out forwards fadeIn; }
+.modal-overlay.closing { animation: .3s ease-in forwards fadeOut; }
+.embedded .modal-overlay { padding-top: 88px; }
+.modal { position: relative; display: flex; width: min(540px, 100%); max-width: 100%; max-height: 90vh; flex-direction: column; overflow: hidden; border: 1px solid var(--border-color); border-radius: 12px; background: var(--bg-primary); box-shadow: 0 10px 15px -3px #0000001a; transform-origin: calc(100% - 28px) 28px; animation: .3s cubic-bezier(.34, 1.56, .64, 1) forwards modalIn; }
+.modal-overlay.closing .modal { animation: .3s cubic-bezier(.4, 0, .2, 1) forwards modalOut; }
+@keyframes modalIn { 0% { opacity: 0; transform: scale(.85) translateY(20px); } to { opacity: 1; transform: none; } }
+@keyframes modalOut { 0% { opacity: 1; transform: scale(1); } to { opacity: 0; transform: scale(0); } }
+.modal-header { display: flex; align-items: center; padding: 16px 52px 16px 24px; border-bottom: 1px solid var(--border-color); }
+.modal-title { color: var(--text-primary); font-size: 18px; font-weight: 700; }
+.modal-body { display: flex; flex-direction: column; gap: 18px; max-height: 65vh; padding: 24px; overflow: auto; color: var(--text-secondary); }
+.modal-body p b { color: var(--text-primary); }
+.modal-footer { display: flex; justify-content: flex-end; gap: 8px; padding: 16px 24px; border-top: 1px solid var(--border-color); background: var(--bg-primary); }
+.modal-close-floating { position: absolute; top: 12px; right: 12px; z-index: 10; display: inline-flex; width: 32px; height: 32px; padding: 0; align-items: center; justify-content: center; border: 1px solid var(--border-color); border-radius: 9999px; background: var(--bg-secondary); color: var(--text-secondary); transition: color .15s, background-color .15s, transform .15s; }
+.modal-close-floating:hover { background: var(--bg-tertiary); color: var(--text-primary); transform: scale(1.1); }
+.modal-close-floating:active { transform: scale(.95); }
+
+/* auth gate + toast */
+.authWrap { display: grid; min-height: 62vh; place-items: center; }
+.auth { width: min(480px, 100%); gap: 14px; padding: 32px; }
+.authTitle { font-size: 26px; font-weight: 650; line-height: 1.2; letter-spacing: -.02em; }
+.toast { position: fixed; right: 16px; bottom: 16px; z-index: 3000; max-width: min(420px, calc(100vw - 32px)); padding: 10px 14px; border: 1px solid var(--glass-border); border-left: 3px solid var(--viz-failure); border-radius: 10px; background: var(--floating-surface); box-shadow: var(--floating-shadow); color: var(--text-primary); font-size: 13px; animation: fadeIn .28s var(--ease-out-strong); }
+.toast.ok { border-left-color: var(--viz-success); }
+
+@media (max-width: 1023px) {
+  .statsRow { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
+  .page { padding: 24px 16px 64px; }
+  .embedded .page { padding-top: 76px; }
+  .statsRow, .specGrid { grid-template-columns: minmax(0, 1fr); }
+  .statTile { padding: 18px 20px; }
+  .modal-overlay { padding: 16px; }
+  .modal { max-height: calc(100dvh - 32px); border-radius: 8px; }
+  .modal-body { padding: 16px; }
+  .modal-footer { flex-direction: column-reverse; align-items: stretch; padding: 16px; }
+  .sheetBody { padding: 18px 16px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+}
+
+/* Open Systemone additions, built from the tokens above */
+textarea.input { height: auto; min-height: 84px; padding: 10px 12px; font: 500 12.5px/1.5 var(--mono); resize: vertical; }
+.grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.check { display: inline-flex; align-items: center; gap: 8px; color: var(--text-primary); font-size: 13px; font-weight: 500; }
+.check input { width: 16px; height: 16px; accent-color: var(--text-primary); }
+.box { display: flex; flex-direction: column; gap: 10px; padding: 14px; border: 1px solid var(--border-color); border-radius: 12px; background: var(--bg-secondary); }
+.code { margin: 0; max-height: 320px; padding: 12px; overflow: auto; border: 1px solid var(--border-color); border-radius: 10px; background: var(--bg-secondary); color: var(--text-primary); font: 12px/1.55 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+.wrap { flex-wrap: wrap; }
+.ok { color: var(--success-badge-text); }
+.bad { color: var(--failure-badge-text); }
+.ellipsis { display: inline-block; max-width: 280px; overflow: hidden; text-overflow: ellipsis; vertical-align: middle; }
+.sheet .modal-footer { margin-top: auto; }
+.content > .segmented { align-self: flex-start; }
+a.link { color: var(--text-primary); text-underline-offset: 3px; }
+@media (max-width: 640px) { .grid2 { grid-template-columns: minmax(0, 1fr); } }
 </style>
 </head>
 <body>
-<main>
-  <div>
-    <div>
-      <h1>System One</h1>
-      <div class="muted">Decision nodes for <code>POST /v1/chat/completions</code> (or <code>/v1/systemone</code> where the host exposes it). Saved to <code>plugins.configs.systemone</code> in config.yaml.</div>
-    </div>
-    <div class="row" id="topActions" style="margin-top:12px"></div>
-  </div>
-  <div id="auth" class="panel" style="display:none"></div>
-  <div id="app"></div>
-</main>
-<div class="toast" id="toast"></div>
+<div class="ambient" aria-hidden="true"><div class="washTop"></div><div class="gridWash"></div></div>
+<main class="page" id="app"></main>
+<div id="sheet"></div>
+<div id="modal"></div>
+<div id="toast" class="toast" role="status" hidden></div>
 <script>
 "use strict";
-const KEY_STORE = "systemone:management-key";
-const CONFIG_PATH = "/v8/management/config/plugins/configs/systemone";
 const API = "/v0/management/systemone";
+const CONFIG_PATH = "/v8/management/config/plugins/configs/systemone";
+const KEYS_API = "/v8/management/config/access/api-keys";
+const KEY_STORE = "systemone:management-key";
+const SESSION_KEY = "systemone:session-key";
+const CAPTURE_FLAG = "systemone:capture-attempted";
+const TAB_STORE = "systemone:tab";
+const PRECISION_STORE = "systemone:precision";
+// Bytes per parameter of each precision: BF16 weights, GGUF Q8_0 (8.5 bits) and Q4_K_M (about 4.8 bits).
+const PRECISIONS = [["bf16", "BF16", 2], ["q8", "Q8", 1.0625], ["q4", "Q4", 0.6]];
+const EMBEDDED = (() => { try { return window.parent !== window; } catch { return true; } })();
+const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
 const QUESTION_TYPES = ["noul", "choice", "score"];
+const ICONS = {
+  close: "M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z",
+  plus: "M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z",
+  copy: "M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z",
+  refresh: "M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z",
+  trash: "M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z",
+  download: "M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z",
+};
 
-const state = { key: "", config: null, presets: [], view: "list", editIndex: -1, form: null, checks: {}, fetched: null, example: null, testResult: null, busy: "" };
+const state = { key: "", keySource: "", tab: storageGet(TAB_STORE) === "hf" ? "hf" : "nodes", loaded: false, error: "",
+  config: { nodes: [], token: "" }, presets: [], checks: {},
+  hf: { status: null, machine: null, index: null, indexError: "", q: "", fit: "all", limit: 40,
+    precision: PRECISIONS.some(p => p[0] === storageGet(PRECISION_STORE)) ? storageGet(PRECISION_STORE) : "bf16" } };
+const ui = {};
 
-// --- tiny DOM helper (text is always set via textContent) ---
+// ---------- theme: follow the panel ----------
+function panelTheme() {
+  try { if (EMBEDDED) return window.parent.document.documentElement.getAttribute("data-theme"); } catch {}
+  let choice = "auto";
+  try {
+    const saved = JSON.parse(deobfuscate(storageGet("cli-proxy-theme")) || "null");
+    choice = (saved && (saved.state ? saved.state.theme : saved.theme)) || choice;
+  } catch {}
+  if (choice === "auto") choice = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "white";
+  return choice === "dark" || choice === "white" ? choice : null;
+}
+function applyTheme() {
+  const theme = panelTheme();
+  theme ? document.documentElement.setAttribute("data-theme", theme) : document.documentElement.removeAttribute("data-theme");
+}
+document.documentElement.classList.toggle("embedded", EMBEDDED);
+applyTheme();
+try { if (EMBEDDED) new MutationObserver(applyTheme).observe(window.parent.document.documentElement, { attributes: true, attributeFilter: ["data-theme"] }); } catch {}
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTheme);
+window.addEventListener("storage", e => { if (e.key === "cli-proxy-theme") applyTheme(); });
+
+// ---------- DOM helpers (text always goes through textContent) ----------
 function h(tag, attrs, ...children) {
   const el = document.createElement(tag);
+  setAttrs(el, attrs);
+  for (const c of children.flat(Infinity)) if (c !== null && c !== undefined && c !== false && c !== "") el.append(c instanceof Node ? c : document.createTextNode(String(c)));
+  return el;
+}
+function s(tag, attrs, ...children) {
+  const el = document.createElementNS("http://www.w3.org/2000/svg", tag);
+  setAttrs(el, attrs);
+  for (const c of children.flat(Infinity)) if (c) el.append(c);
+  return el;
+}
+function setAttrs(el, attrs) {
   for (const [k, v] of Object.entries(attrs || {})) {
     if (v === undefined || v === null || v === false) continue;
     if (k.startsWith("on")) el.addEventListener(k.slice(2), v);
@@ -89,47 +340,83 @@ function h(tag, attrs, ...children) {
     else if (k === "checked") el.checked = !!v;
     else el.setAttribute(k, v === true ? "" : v);
   }
-  for (const c of children.flat()) {
-    if (c === null || c === undefined || c === false) continue;
-    el.append(c instanceof Node ? c : document.createTextNode(String(c)));
-  }
-  return el;
 }
-function plusIcon() {
-  const ns = "http://www.w3.org/2000/svg";
-  const svg = document.createElementNS(ns, "svg");
-  svg.setAttribute("viewBox", "0 0 24 24"); svg.setAttribute("width", "16"); svg.setAttribute("height", "16");
-  svg.setAttribute("fill", "none"); svg.setAttribute("stroke", "currentColor"); svg.setAttribute("stroke-width", "2.5");
-  svg.setAttribute("stroke-linecap", "round"); svg.setAttribute("aria-hidden", "true");
-  const path = document.createElementNS(ns, "path");
-  path.setAttribute("d", "M12 5v14M5 12h14");
-  svg.append(path);
-  return svg;
+function icon(name, size = 18) {
+  return s("svg", { class: "i", viewBox: "0 0 24 24", width: size, height: size, "aria-hidden": "true" }, s("path", { d: ICONS[name] }));
 }
-function toast(msg) {
+function spinner(size = 16) {
+  return s("svg", { class: "i spin", viewBox: "0 0 24 24", width: size, height: size, "aria-hidden": "true" },
+    s("circle", { cx: 12, cy: 12, r: 9, fill: "none", stroke: "currentColor", "stroke-width": 2.5, "stroke-linecap": "round", "stroke-dasharray": "40 100" }));
+}
+function put(el, ...children) { el.replaceChildren(...children.flat(Infinity).filter(c => c !== null && c !== undefined && c !== false && c !== "")); }
+function td(content, cls, attrs) { return h("td", { class: cls, ...attrs }, content); }
+function toast(msg, ok) {
   const t = document.getElementById("toast");
-  t.textContent = msg; t.style.display = "block";
-  clearTimeout(toast.timer); toast.timer = setTimeout(() => (t.style.display = "none"), 3500);
+  t.textContent = msg; t.classList.toggle("ok", !!ok); t.hidden = false;
+  clearTimeout(toast.timer); toast.timer = setTimeout(() => { t.hidden = true; }, 3500);
 }
 function storageGet(k) { try { return localStorage.getItem(k) || ""; } catch { return ""; } }
 function storageSet(k, v) { try { v ? localStorage.setItem(k, v) : localStorage.removeItem(k); } catch {} }
+function sessionGet(k) { try { return sessionStorage.getItem(k) || ""; } catch { return ""; } }
+function sessionSet(k, v) { try { v ? sessionStorage.setItem(k, v) : sessionStorage.removeItem(k); } catch {} }
+async function copyText(text, what) {
+  let ok = false;
+  try { await navigator.clipboard.writeText(text); ok = true; } catch {
+    const area = h("textarea", { readonly: true, style: "position:fixed;top:0;left:0;opacity:0" });
+    area.value = text; document.body.append(area); area.select();
+    try { ok = document.execCommand("copy"); } catch {}
+    area.remove();
+  }
+  toast(ok ? `${what} copied` : "Copy failed: select the text and copy it", ok);
+}
+function field(label, input, hint) { return h("div", { class: "field" }, h("label", {}, label), input, hint ? h("p", { class: "hint" }, hint) : null); }
+function bind(obj, key, attrs) { return h("input", { class: "input", ...attrs, value: obj[key], oninput: e => { obj[key] = e.target.value; } }); }
+function tile(label, value, hint, accent, meterPct) {
+  return h("div", { class: "statTile", style: accent ? `--tile-accent:${accent}` : null },
+    h("span", { class: "statLabel" }, label), h("span", { class: "statValue", title: value }, value),
+    meterPct === undefined ? null : h("div", { class: "meter", style: `--meter-fill:${accent || "var(--viz-requests)"}` }, h("i", { style: `width:${Math.min(100, Math.max(0, meterPct))}%` })),
+    h("span", { class: "statHint" }, hint));
+}
+function section(eyebrow, title, description, ...children) {
+  return h("section", { class: "section" },
+    h("div", { class: "sectionHead" }, h("div", { class: "sectionCopy" },
+      h("span", { class: "eyebrow" }, eyebrow), h("h2", { class: "sectionTitle" }, title),
+      description ? h("p", { class: "sectionDescription" }, description) : null)),
+    children);
+}
 
-// The management UI (same origin, it embeds this page in an iframe) keeps its session key in
-// localStorage, XOR-obfuscated with a host/user-agent key behind "enc::v1::". Reuse it so the
-// page opens without asking for the key again.
+// ---------- formatting ----------
+// en-US, not the browser's locale, which would mix its own month names and separators into the English page.
+const numberFormat = new Intl.NumberFormat("en-US");
+const fmt = n => numberFormat.format(n || 0);
+const plural = (n, word) => `${fmt(n)} ${word}${n === 1 ? "" : "s"}`;
+const dateTimeFmt = new Intl.DateTimeFormat("en-US", { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+function fmtBytes(n) {
+  if (!n) return "0 B";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  const i = Math.min(units.length - 1, Math.floor(Math.log(n) / Math.log(1024)));
+  return +(n / 1024 ** i).toFixed(i >= 3 ? 1 : 0) + " " + units[i];
+}
+function fmtParams(n) {
+  if (!n) return "—";
+  return n >= 1e9 ? +(n / 1e9).toFixed(1) + "B" : +(n / 1e6).toFixed(0) + "M";
+}
+
+// ---------- panel session ----------
+// The panel (same origin, it embeds this page) keeps its state in localStorage, XOR-obfuscated with a
+// host/user-agent key behind "enc::v1::".
+function obfuscationKey() { return new TextEncoder().encode("cli-proxy-api-webui::secure-storage|" + location.host + "|" + navigator.userAgent); }
 function deobfuscate(value) {
   if (!value || !value.startsWith("enc::v1::")) return value;
-  const key = new TextEncoder().encode("cli-proxy-api-webui::secure-storage|" + location.host + "|" + navigator.userAgent);
-  const bin = atob(value.slice(9));
-  const out = new Uint8Array(bin.length);
+  const key = obfuscationKey(), bin = atob(value.slice(9)), out = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i) ^ key[i % key.length];
   return new TextDecoder().decode(out);
 }
 function managementSessionKey() {
   try {
     const auth = JSON.parse(deobfuscate(storageGet("cli-proxy-auth")) || "null");
-    const fromStore = auth && (auth.state ? auth.state.managementKey : auth.managementKey);
-    if (typeof fromStore === "string" && fromStore) return fromStore;
+    const key = auth && (auth.state ? auth.state.managementKey : auth.managementKey);
+    if (typeof key === "string" && key) return key;
   } catch {}
   try {
     const legacy = JSON.parse(deobfuscate(storageGet("managementKey")) || "null");
@@ -138,38 +425,214 @@ function managementSessionKey() {
   return "";
 }
 
-async function call(method, path, body) {
-  const res = await fetch(path, {
-    method,
-    headers: { "Authorization": "Bearer " + state.key, "Content-Type": "application/json" },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
-  const text = await res.text();
+// ---------- API + auth ----------
+async function call(method, url, body) {
+  const opts = { method, headers: { Authorization: "Bearer " + state.key }, cache: "no-store" };
+  if (body !== undefined) { opts.headers["Content-Type"] = "application/json"; opts.body = JSON.stringify(body); }
+  const res = await fetch(url, opts);
+  if (res.status === 401 || res.status === 403) {
+    if (ui.content) showAuth("Management key rejected.");
+    throw new Error("unauthorized");
+  }
   let data = null;
-  try { data = text ? JSON.parse(text) : null; } catch { data = { error: text }; }
-  if (res.status === 401 || res.status === 403) { if (state.config) showAuth("Management key rejected."); throw new Error("unauthorized"); }
-  if (!res.ok && !(res.status === 404 && path === CONFIG_PATH)) throw new Error((data && (data.message || data.error)) || ("HTTP " + res.status));
-  return { status: res.status, data };
+  try { data = await res.json(); } catch {}
+  if (res.status === 404 && url.startsWith(CONFIG_PATH)) return null;
+  if (!res.ok) throw new Error((data && (data.message || data.error)) || "HTTP " + res.status);
+  return data;
 }
 
-// --- config load / save ---
-async function load() {
-  const [cfg, presets] = await Promise.all([call("GET", CONFIG_PATH), call("GET", API + "/presets").catch(() => ({ data: { presets: [] } }))]);
-  const c = cfg.status === 404 || !cfg.data ? {} : cfg.data;
-  state.config = { nodes: Array.isArray(c.nodes) ? c.nodes : [] };
-  state.presets = (presets.data && presets.data.presets) || [];
+// When the panel does not remember the password, the key only lives in the parent page's memory. Its API
+// client sends it as an XHR Authorization header, so capture the header from the parent's next request
+// (triggered via its plugin refresh event) and keep it in the tab's sessionStorage. The refresh remounts
+// this iframe, so the reloaded page picks the key up from sessionStorage.
+function captureParentKey(timeoutMs) {
+  return new Promise(resolve => {
+    let win;
+    try { win = window.parent; if (!win || win === window || !win.XMLHttpRequest) return resolve(""); } catch { return resolve(""); }
+    const proto = win.XMLHttpRequest.prototype;
+    const original = proto.setRequestHeader;
+    let done = false;
+    const finish = key => {
+      if (done) return;
+      done = true;
+      if (proto.setRequestHeader === wrapper) proto.setRequestHeader = original;
+      resolve(key);
+    };
+    function wrapper(name, value) {
+      if (String(name).toLowerCase() === "authorization" && /^Bearer\s+\S/i.test(String(value))) {
+        const key = String(value).replace(/^Bearer\s+/i, "");
+        try { win.sessionStorage.setItem(SESSION_KEY, key); } catch {}
+        finish(key);
+      }
+      return original.apply(this, arguments);
+    }
+    proto.setRequestHeader = wrapper;
+    try { win.dispatchEvent(new win.Event("plugin-resources-refresh")); } catch {}
+    setTimeout(() => finish(""), timeoutMs);
+  });
+}
+async function tryKey(key, source) {
+  if (!key) return false;
+  state.key = key; state.keySource = source;
+  try { await call("GET", API + "/presets"); } catch (e) { if (e.message === "unauthorized") return false; toast(e.message); }
+  build();
+  return true;
+}
+async function start() {
+  if (await tryKey(managementSessionKey(), "session")) return;
+  if (await tryKey(sessionGet(SESSION_KEY), "session")) { sessionSet(CAPTURE_FLAG, ""); return; }
+  if (await tryKey(storageGet(KEY_STORE), "local")) return;
+  if (!sessionGet(CAPTURE_FLAG)) {
+    sessionSet(CAPTURE_FLAG, "1");
+    if (await tryKey(await captureParentKey(3000), "session")) { sessionSet(CAPTURE_FLAG, ""); return; }
+  }
+  showAuth("Open this page from the management panel while signed in, or enter the management key.");
+}
+function showAuth(msg) {
+  clearTimeout(pollHF.timer);
+  ui.content = null;
+  const input = h("input", { class: "input", type: "password", placeholder: "Management key", autocomplete: "off", "aria-label": "Management key" });
+  const go = async () => {
+    const key = input.value.trim();
+    if (!key) return;
+    if (await tryKey(key, "local")) storageSet(KEY_STORE, key);
+    else toast("Management key rejected.");
+  };
+  input.addEventListener("keydown", e => { if (e.key === "Enter") go(); });
+  document.getElementById("app").replaceChildren(h("div", { class: "authWrap" }, h("div", { class: "panel auth" },
+    h("span", { class: "eyebrow" }, "Open Systemone"),
+    h("h1", { class: "authTitle" }, "Connect with the management key"),
+    h("p", { class: "sectionDescription" }, msg),
+    h("div", { class: "row" }, input, h("button", { class: "btn primary", onclick: go }, "Connect")))));
+  input.focus();
+}
+function forgetKey() {
+  storageSet(KEY_STORE, "");
+  state.key = ""; state.keySource = "";
+  showAuth("Key forgotten. Enter the management key to continue.");
+}
+
+// ---------- page ----------
+function build() {
+  ui.title = h("h1", { class: "heroTitle" }, "Open Systemone", h("span", { class: "heroPeriod", "aria-hidden": "true" }, "."));
+  ui.meta = h("p", { class: "heroMeta" }, "Loading…");
+  ui.tabs = h("div", { class: "segmented", role: "tablist" });
+  ui.body = h("div", { class: "content" });
+  ui.content = h("div", { class: "content" },
+    h("section", { class: "hero" },
+      h("div", { class: "heroCopy" }, h("span", { class: "eyebrow" }, "System One decisions"), ui.title, ui.meta),
+      h("div", { class: "heroActions" },
+        state.keySource === "local" ? h("button", { type: "button", class: "btn ghost", onclick: forgetKey }, "Forget key") : null,
+        h("button", { type: "button", class: "btn", onclick: () => load(), "aria-label": "Refresh" }, icon("refresh", 16)),
+        h("button", { type: "button", class: "btn primary", onclick: () => openNode(-1) }, icon("plus", 16), "Add node"))),
+    ui.tabs, ui.body);
+  document.getElementById("app").replaceChildren(ui.content);
   render();
+  load();
 }
-async function saveNodes(nodes) {
-  await call("PUT", CONFIG_PATH + "/nodes", nodes);
-  state.config.nodes = nodes;
+async function load() {
+  try {
+    const [cfg, presets] = await Promise.all([call("GET", CONFIG_PATH), call("GET", API + "/presets").catch(() => ({ presets: [] }))]);
+    const c = cfg || {};
+    state.config = { nodes: Array.isArray(c.nodes) ? c.nodes : [], token: typeof c["huggingface-token"] === "string" ? c["huggingface-token"] : "" };
+    state.presets = (presets && presets.presets) || [];
+    state.error = "";
+  } catch (e) {
+    if (e.message === "unauthorized") return;
+    state.error = e.message;
+    toast("Could not load the config: " + e.message);
+  }
+  state.loaded = true;
+  render();
+  loadHF();
+}
+function setTab(tab) { state.tab = tab; storageSet(TAB_STORE, tab); render(); }
+function render() {
+  if (!ui.content) return;
+  const nodes = state.config.nodes, st = state.hf.status;
+  const models = nodes.reduce((n, x) => n + effectiveModels(toForm(x)).length, 0);
+  ui.meta.textContent = state.loaded
+    ? `${plural(nodes.length, "node")} · ${plural(models, "model")} · ${plural(st ? st.local.length : 0, "downloaded model")}`
+    : "Loading…";
+  put(ui.tabs, ...[["nodes", "Nodes"], ["hf", "Hugging Face"]].map(([id, label]) =>
+    h("button", { type: "button", role: "tab", class: "segment" + (state.tab === id ? " on" : ""), "aria-selected": String(state.tab === id), onclick: () => setTab(id) }, label)));
+  put(ui.body, ...(state.tab === "hf" ? renderHF() : [renderNodes()]));
 }
 
-// --- node form model ---
+// ---------- modal (core Modal) ----------
+function openModal(title, body, footer) {
+  const root = document.getElementById("modal");
+  const onKey = e => { if (e.key === "Escape") close(); };
+  const close = () => {
+    if (overlay.classList.contains("closing")) return;
+    document.removeEventListener("keydown", onKey);
+    overlay.classList.add("closing");
+    setTimeout(() => { overlay.remove(); if (!root.childElementCount) document.body.classList.remove("modal-open"); }, reducedMotion.matches ? 0 : 280);
+  };
+  const titleId = "modal-title-" + Date.now();
+  const overlay = h("div", { class: "modal-overlay", onmousedown: e => { if (e.target === overlay) close(); } },
+    h("div", { class: "modal", role: "dialog", "aria-modal": "true", "aria-labelledby": titleId },
+      h("button", { type: "button", class: "modal-close-floating", "aria-label": "Close", onclick: close }, icon("close", 18)),
+      h("div", { class: "modal-header" }, h("h2", { class: "modal-title", id: titleId }, title)),
+      h("div", { class: "modal-body" }, body),
+      h("div", { class: "modal-footer" }, footer(close))));
+  document.addEventListener("keydown", onKey);
+  document.body.classList.add("modal-open");
+  root.append(overlay);
+  return close;
+}
+// A small confirm dialog; action resolves when done and its error is shown in the dialog.
+function confirmDialog(title, paragraphs, actionLabel, action) {
+  const error = h("p", { class: "formError", hidden: true });
+  openModal(title, [paragraphs.map(p => h("p", {}, p)), error], close => {
+    const ok = h("button", { type: "button", class: "btn danger", onclick: async () => {
+      ok.disabled = true; put(ok, spinner(14), actionLabel);
+      try { await action(); close(); } catch (e) { error.textContent = e.message; error.hidden = false; ok.disabled = false; put(ok, actionLabel); }
+    } }, actionLabel);
+    return [h("button", { type: "button", class: "btn", onclick: close }, "Cancel"), ok];
+  });
+}
+
+// ---------- sheet (core Sheet) ----------
+let closeSheet = () => {};
+// openSheet shows a side sheet; fill(body, foot, close) renders into it and may be called again to refresh.
+function openSheet(eyebrow, title, desc, fill) {
+  closeSheet(true);
+  const root = document.getElementById("sheet");
+  const body = h("div", { class: "sheetBody" });
+  const foot = h("div", { class: "modal-footer" });
+  const onKey = e => { if (e.key === "Escape" && !document.getElementById("modal").childElementCount) close(); };
+  let closing = false;
+  const close = now => {
+    if (closing) return;
+    closing = true;
+    document.removeEventListener("keydown", onKey);
+    overlay.classList.add("closing");
+    setTimeout(() => { overlay.remove(); if (!root.childElementCount) document.body.style.overflow = ""; }, now === true || reducedMotion.matches ? 0 : 260);
+  };
+  closeSheet = close;
+  const overlay = h("div", { class: "sheetOverlay", onclick: e => { if (e.target === overlay) close(); } },
+    h("div", { class: "sheet", role: "dialog", "aria-modal": "true", "aria-label": eyebrow, tabindex: -1 },
+      h("div", { class: "sheetHead" },
+        h("span", { class: "sheetEyebrow" }, eyebrow),
+        h("h2", { class: "sheetTitle" }, title),
+        desc ? h("div", { class: "sheetDesc" }, desc) : null,
+        h("button", { type: "button", class: "closeBtn", "aria-label": "Close", onclick: close }, icon("close", 18))),
+      body, foot));
+  document.addEventListener("keydown", onKey);
+  document.body.style.overflow = "hidden";
+  root.append(overlay);
+  overlay.firstChild.focus();
+  const refresh = () => { const top = body.scrollTop; fill(body, foot, close, refresh); body.scrollTop = top; };
+  refresh();
+  return { close, refresh, isOpen: () => !closing };
+}
+
+// ================= Nodes =================
 function presetOf(name) { return state.presets.find(p => p.preset === name) || null; }
 function toForm(n) {
   const keys = [].concat(n["api-key"] ? [n["api-key"]] : [], n["api-keys"] || []);
-  const models = (n.models || []).map(m => typeof m === "string" ? { id: m, name: "" } : { id: m.id || "", name: m.name || "" });
+  const models = (n.models || []).map(m => typeof m === "string" ? { id: m, name: "", alias: "" } : { id: m.id || "", name: m.name || "", alias: m.alias || "" });
   return {
     name: n.name || "", preset: n.preset || "", prefix: n.prefix || "", url: n.url || "",
     keys: keys.length ? keys : [""], headers: Object.entries(n.headers || {}).map(([k, v]) => ({ k, v })),
@@ -189,7 +652,12 @@ function fromForm(f) {
   if (Object.keys(headers).length) n.headers = headers;
   if (f.proxy.trim()) n["proxy-url"] = f.proxy.trim();
   if (f.disabled) n.disabled = true;
-  const models = f.models.filter(m => m.id.trim()).map(m => m.name.trim() ? { id: m.id.trim(), name: m.name.trim() } : { id: m.id.trim() });
+  const models = f.models.filter(m => m.id.trim()).map(m => {
+    const out = { id: m.id.trim() };
+    if (m.name.trim()) out.name = m.name.trim();
+    if ((m.alias || "").trim()) out.alias = m.alias.trim();
+    return out;
+  });
   if (models.length) n.models = models;
   return n;
 }
@@ -198,8 +666,9 @@ function effectiveModels(f) {
   const p = presetOf(f.preset);
   return p ? p.models.map(m => ({ id: m.id, name: m.name || "" })) : [];
 }
+function prefixOf(f) { return f.prefix.trim() || f.preset; }
 function validateForm(f, index) {
-  const prefix = f.prefix.trim() || f.preset;
+  const prefix = prefixOf(f);
   if (!prefix) return "Prefix is required";
   if (prefix.includes("/")) return "Prefix must not contain '/'";
   const dup = state.config.nodes.some((n, i) => i !== index && (n.prefix || n.preset || "").toLowerCase() === prefix.toLowerCase());
@@ -212,8 +681,104 @@ function validateForm(f, index) {
   return "";
 }
 function nodeForApi(f) { const n = fromForm(f); if (!n.prefix) n.prefix = f.preset || "check"; return n; }
+async function saveNodes(nodes) {
+  await call("PUT", CONFIG_PATH + "/nodes", nodes);
+  state.config.nodes = nodes;
+}
 
-// --- example payload (same shape as 9router's example card) ---
+function checkPill(prefix) {
+  const c = state.checks[prefix];
+  if (!c) return null;
+  if (c.pending) return h("span", { class: "pill muted" }, spinner(10), " Checking");
+  const ms = typeof c.latency_ms === "number" ? " · " + c.latency_ms + " ms" : "";
+  return c.valid ? h("span", { class: "pill", title: "Checked via " + c.method }, "OK" + ms) : h("span", { class: "pill bad", title: c.error || "" }, "Failed" + ms);
+}
+function renderNodes() {
+  const nodes = state.config.nodes;
+  const head = h("thead", {}, h("tr", {}, ["Node", "URL", "Models", "Keys", "Status", ""].map(t => h("th", {}, t))));
+  let rows;
+  if (!state.loaded) rows = [h("tr", {}, td("Loading nodes…", "empty", { colspan: 6 }))];
+  else if (!nodes.length) rows = [h("tr", {}, td("No nodes yet. Click Add node and enter a System One server's decision URL, for example http://127.0.0.1:8000/v1/systemone.", "empty", { colspan: 6 }))];
+  else rows = nodes.map((n, i) => {
+    const f = toForm(n), prefix = prefixOf(f), preset = presetOf(f.preset), models = effectiveModels(f);
+    const keyCount = f.keys.filter(Boolean).length || (preset && !preset.key_required ? 1 : 0);
+    const stop = fn => ev => { ev.stopPropagation(); fn(); };
+    return h("tr", { class: "click", onclick: () => openNode(i) },
+      td(h("div", { class: "keyCell" }, h("b", {}, f.name || (preset && preset.name) || prefix), h("span", { class: "keyLine" }, prefix + "/…", f.preset ? " · preset " + f.preset : ""))),
+      td(h("span", { class: "mono ellipsis", title: f.url || (preset && preset.url) || "" }, f.url || (preset && preset.url) || ""), "soft"),
+      td(models.length ? fmt(models.length) : "Any", "soft"),
+      td(fmt(keyCount), "soft"),
+      td(h("div", { class: "row" }, f.disabled ? h("span", { class: "pill muted" }, "Disabled") : h("span", { class: "pill" }, "Enabled"), checkPill(prefix))),
+      td(h("div", { class: "actions" },
+        h("button", { type: "button", class: "btn sm", onclick: stop(() => checkSaved(i)) }, "Check"),
+        h("button", { type: "button", class: "iconBtn", title: "Delete", "aria-label": "Delete node", onclick: stop(() => removeNode(i)) }, icon("trash", 16)))));
+  });
+  return section("plugins.configs.systemone", "Decision nodes",
+    "Each node is a System One decision server. Clients send decisions to POST /v1/chat/completions (or /v1/systemone where the host exposes it) and pick a node by asking for the model \"<prefix>/<model>\". The list is saved in config.yaml.",
+    h("div", { class: "tableWrap xscroll" }, h("table", { class: "table" }, head, h("tbody", {}, rows))));
+}
+
+// timedCheck runs a node check and records the round trip as seen from this page.
+async function timedCheck(body) {
+  const started = performance.now();
+  let result;
+  try { result = (await call("POST", API + "/check", body)) || {}; }
+  catch (err) { result = { valid: false, error: err.message }; }
+  result.latency_ms = Math.round(performance.now() - started);
+  return result;
+}
+// Saved, enabled nodes are tested through CLIProxyAPI's own /v1/chat/completions, so Check and Send take the real
+// routing path and are counted in usage. Unsaved edits and disabled nodes are unknown to the proxy and are
+// tested directly instead.
+let clientKey = null;
+async function proxyCall(body) {
+  if (clientKey === null) {
+    try { const keys = await call("GET", KEYS_API); clientKey = Array.isArray(keys) && keys.length ? String(keys[0]) : ""; }
+    catch { clientKey = ""; }
+  }
+  const started = performance.now();
+  let res, data = null;
+  try {
+    res = await fetch("/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...(clientKey ? { Authorization: "Bearer " + clientKey } : {}) },
+      body: JSON.stringify(body),
+    });
+    const text = await res.text();
+    try { data = text ? JSON.parse(text) : null; } catch { data = { error: text }; }
+  } catch (err) {
+    return { ok: false, status: 0, error: err.message, latency_ms: Math.round(performance.now() - started) };
+  }
+  const latency_ms = Math.round(performance.now() - started);
+  if (res.ok) return { ok: true, status: res.status, response: data, latency_ms };
+  const e = data && data.error;
+  return { ok: false, status: res.status, error: (e && (e.message || (typeof e === "string" ? e : JSON.stringify(e)))) || "HTTP " + res.status, latency_ms };
+}
+function savedAsIs(i, f) {
+  if (i < 0 || f.disabled) return false;
+  return JSON.stringify(fromForm(f)) === JSON.stringify(fromForm(toForm(state.config.nodes[i])));
+}
+async function checkNode(i, f, modelID) {
+  const model = modelID || (effectiveModels(f)[0] || {}).id;
+  if (!model || !savedAsIs(i, f)) return timedCheck({ node: nodeForApi(f), model: modelID });
+  const r = await proxyCall({ model: prefixOf(f) + "/" + model, state: "ping", questions: { probe: { type: "noul", instructions: "Is this a probe?" } } });
+  return r.ok ? { valid: true, method: "proxy", model, latency_ms: r.latency_ms } : { valid: false, error: r.error, latency_ms: r.latency_ms };
+}
+async function checkSaved(i) {
+  const f = toForm(state.config.nodes[i]), prefix = prefixOf(f);
+  state.checks[prefix] = { pending: true }; render();
+  state.checks[prefix] = await checkNode(i, f, "");
+  render();
+}
+function removeNode(i) {
+  const n = state.config.nodes[i];
+  confirmDialog("Delete node", [`Delete "${n.name || n.prefix || n.preset}" and its models? Clients that ask for its models will get an error.`], "Delete", async () => {
+    await saveNodes(state.config.nodes.filter((_, j) => j !== i));
+    toast("Node deleted", true); render();
+  });
+}
+
+// ---------- node sheet ----------
 function blankQuestion() { return { name: "", type: "noul", instructions: "", choices: [{ label: "", description: "" }], levels: [""] }; }
 function defaultExample() {
   return { model: "", state: "Payment failed twice and the customer is asking for a refund.", questions: [{ ...blankQuestion(), name: "is_urgent", instructions: "Does this request require urgent attention?" }] };
@@ -241,9 +806,9 @@ function questionsReady(questions) {
   if (!named.length) return "Add at least one named question";
   if (new Set(named.map(q => q.name.trim())).size !== named.length) return "Question names must be unique";
   for (const q of named) {
-    if (!q.instructions.trim()) return "Question \"" + q.name + "\" needs instructions";
-    if (q.type === "choice" && !q.choices.some(r => r.label.trim())) return "Choice question \"" + q.name + "\" needs at least one option";
-    if (q.type === "score" && !q.levels.some(l => l.trim())) return "Score question \"" + q.name + "\" needs at least one level";
+    if (!q.instructions.trim()) return `Question "${q.name}" needs instructions`;
+    if (q.type === "choice" && !q.choices.some(r => r.label.trim())) return `Choice question "${q.name}" needs at least one option`;
+    if (q.type === "score" && !q.levels.some(l => l.trim())) return `Score question "${q.name}" needs at least one level`;
   }
   return "";
 }
@@ -254,406 +819,421 @@ function parseState(text) {
 }
 function examplePayload(ex) { return { state: parseState(ex.state), questions: questionsToBody(ex.questions) }; }
 
-// --- views ---
-function render() {
-  renderTop();
-  const app = document.getElementById("app");
-  app.replaceChildren(state.view === "edit" ? renderEdit() : renderList());
-}
-function renderTop() {
-  const top = document.getElementById("topActions");
-  if (!state.config) { top.replaceChildren(); return; }
-  top.replaceChildren(...[
-    state.view === "list" ? h("button", { class: "primary icon-btn", onclick: () => openEdit(-1) }, plusIcon(), "Add System One node") : null,
-    state.keySource === "local" ? h("button", { onclick: () => { storageSet(KEY_STORE, ""); state.key = ""; showAuth(""); } }, "Forget key") : null,
-  ].filter(Boolean));
-}
-function latencyText(r) { return r && typeof r.latency_ms === "number" ? " - " + r.latency_ms + "ms" : ""; }
-function statusChip(prefix) {
-  const c = state.checks[prefix];
-  if (!c) return null;
-  if (c.pending) return h("span", { class: "chip" }, "checking…");
-  return c.valid ? h("span", { class: "chip badge-ok" }, "OK · " + c.method + latencyText(c)) : h("span", { class: "chip badge-bad", title: c.error || "" }, "Failed" + latencyText(c));
-}
-function renderList() {
-  const nodes = state.config.nodes;
-  const wrap = h("div", { class: "panel" }, h("h2", {}, "Nodes"));
-  if (!nodes.length) {
-    wrap.append(h("div", { class: "empty" }, "No System One nodes yet. Add one with its decision URL, e.g. http://127.0.0.1:8000/v1/systemone."));
-    return wrap;
-  }
-  nodes.forEach((n, i) => {
-    const f = toForm(n);
-    const prefix = f.prefix || f.preset;
-    const preset = presetOf(f.preset);
-    const models = effectiveModels(f);
-    const keyCount = f.keys.filter(Boolean).length || (preset && !preset.key_required ? 1 : 0);
-    wrap.append(h("div", { class: "card" },
-      h("div", { class: "meta" },
-        h("div", { class: "row" }, h("strong", {}, f.name || (preset && preset.name) || prefix), h("span", { class: "chip" }, prefix + "/…"),
-          f.preset ? h("span", { class: "chip" }, "preset: " + f.preset) : null,
-          f.disabled ? h("span", { class: "chip badge-bad" }, "disabled") : null, statusChip(prefix)),
-        h("div", { class: "url" }, f.url || (preset && preset.url) || ""),
-        h("div", { class: "muted" }, (models.length ? models.length + " model(s)" : "any model") + " · " + keyCount + " key(s)" + (f.proxy ? " · proxy " + f.proxy : ""))),
-      h("div", { class: "row" },
-        h("button", { onclick: () => checkSaved(i) }, "Check"),
-        h("button", { onclick: () => openEdit(i) }, "Open"),
-        h("button", { class: "danger", onclick: () => removeNode(i) }, "Delete"))));
+function openNode(index) {
+  if (state.tab !== "nodes") setTab("nodes");
+  const ed = { index, form: toForm(index >= 0 ? state.config.nodes[index] : {}), example: defaultExample(), fetched: null, check: null, test: null, busy: "" };
+  const f = ed.form;
+  const title = index < 0 ? "New node" : f.name || prefixOf(f);
+  openSheet(index < 0 ? "Add node" : "Edit node", title, index < 0 ? null : prefixOf(f) + "/…", (body, foot, close, refresh) => {
+    const run = async (what, fn) => { ed.busy = what; refresh(); try { await fn(); } finally { ed.busy = ""; refresh(); } };
+    put(body, nodeSettings(ed, refresh, run), nodeModels(ed, refresh, run), nodeExample(ed, refresh, run));
+    const c = ed.check;
+    put(foot, 
+      c ? h("span", { class: c.valid ? "ok" : "bad", style: "margin-right:auto;align-self:center;font-size:13px" },
+        c.valid ? `OK · ${c.method}${typeof c.latency_ms === "number" ? " · " + c.latency_ms + " ms" : ""}${c.health && c.health.device ? " · " + c.health.device : ""}` : (c.error || "Failed")) : null,
+      h("button", { type: "button", class: "btn", disabled: ed.busy === "check", onclick: () => {
+        const err = validateForm(f, ed.index); if (err) return toast(err);
+        run("check", async () => { ed.check = await checkNode(ed.index, f, ""); });
+      } }, ed.busy === "check" ? spinner(14) : null, "Check"),
+      h("button", { type: "button", class: "btn primary", disabled: ed.busy === "save", onclick: () => saveNode(ed, run) }, ed.busy === "save" ? spinner(14) : null, index < 0 && ed.index < 0 ? "Create node" : "Save"));
   });
-  return wrap;
 }
-// timedCheck runs a node check and records the round trip as seen from this page.
-async function timedCheck(body) {
-  const started = performance.now();
-  let result;
-  try { result = (await call("POST", API + "/check", body)).data || {}; }
-  catch (err) { result = { valid: false, error: err.message }; }
-  result.latency_ms = Math.round(performance.now() - started);
-  return result;
+async function saveNode(ed, run) {
+  const err = validateForm(ed.form, ed.index);
+  if (err) return toast(err);
+  const nodes = state.config.nodes.slice();
+  const n = fromForm(ed.form);
+  if (!n.prefix) delete n.prefix;
+  if (ed.index < 0) nodes.push(n); else nodes[ed.index] = n;
+  await run("save", async () => {
+    try {
+      await saveNodes(nodes);
+      if (ed.index < 0) ed.index = nodes.length - 1;
+      toast("Saved. CLIProxyAPI reloads the plugin config by itself.", true);
+      render();
+    } catch (e) { toast(e.message); }
+  });
 }
-// Saved, enabled nodes are tested through CLIProxyAPI's own /v1/chat/completions (as 9router tests
-// models through its API), so Check and Send take the real routing path and are counted in usage.
-// Unsaved edits and disabled nodes are unknown to the proxy and are tested directly instead.
-let clientKey = null;
-async function proxyCall(body) {
-  if (clientKey === null) {
-    try { const keys = (await call("GET", "/v8/management/config/access/api-keys")).data; clientKey = Array.isArray(keys) && keys.length ? String(keys[0]) : ""; }
-    catch { clientKey = ""; }
-  }
-  const started = performance.now();
-  let res, data = null;
-  try {
-    res = await fetch("/v1/chat/completions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", ...(clientKey ? { "Authorization": "Bearer " + clientKey } : {}) },
-      body: JSON.stringify(body),
-    });
-    const text = await res.text();
-    try { data = text ? JSON.parse(text) : null; } catch { data = { error: text }; }
-  } catch (err) {
-    return { ok: false, status: 0, error: err.message, latency_ms: Math.round(performance.now() - started) };
-  }
-  const latency_ms = Math.round(performance.now() - started);
-  if (res.ok) return { ok: true, status: res.status, response: data, latency_ms };
-  const e = data && data.error;
-  return { ok: false, status: res.status, error: (e && (e.message || (typeof e === "string" ? e : JSON.stringify(e)))) || "HTTP " + res.status, latency_ms };
-}
-function savedAsIs(i, f) {
-  if (i < 0 || f.disabled) return false;
-  return JSON.stringify(fromForm(f)) === JSON.stringify(fromForm(toForm(state.config.nodes[i])));
-}
-// checkNode sends a probe decision through the proxy for saved nodes, else runs the direct check.
-async function checkNode(i, f, modelID) {
-  const model = modelID || (effectiveModels(f)[0] || {}).id;
-  if (!model || !savedAsIs(i, f)) return timedCheck({ node: nodeForApi(f), model: modelID });
-  const r = await proxyCall({ model: (f.prefix.trim() || f.preset) + "/" + model, state: "ping", questions: { probe: { type: "noul", instructions: "Is this a probe?" } } });
-  return r.ok ? { valid: true, method: "proxy", model, latency_ms: r.latency_ms } : { valid: false, error: r.error, latency_ms: r.latency_ms };
-}
-async function checkSaved(i) {
-  const f = toForm(state.config.nodes[i]);
-  const prefix = f.prefix || f.preset;
-  state.checks[prefix] = { pending: true }; render();
-  state.checks[prefix] = await checkNode(i, f, "");
-  render();
-}
-async function removeNode(i) {
-  const n = state.config.nodes[i];
-  if (!confirm("Delete System One node \"" + (n.name || n.prefix || n.preset) + "\" and its models?")) return;
-  try { await saveNodes(state.config.nodes.filter((_, j) => j !== i)); toast("Node deleted"); render(); } catch (err) { toast(err.message); }
-}
-function openEdit(i) {
-  state.view = "edit"; state.editIndex = i;
-  state.form = i >= 0 ? toForm(state.config.nodes[i]) : toForm({});
-  state.fetched = null; state.testResult = null; state.formCheck = null;
-  state.example = defaultExample();
-  render(); window.scrollTo(0, 0);
-}
-
-function field(label, input, hint) { return h("div", {}, h("label", {}, label), input, hint ? h("div", { class: "hint" }, hint) : null); }
-function bind(obj, key, attrs) {
-  return h("input", { ...attrs, value: obj[key], oninput: e => { obj[key] = e.target.value; } });
-}
-
-function renderEdit() {
-  const f = state.form;
-  const isNew = state.editIndex < 0;
-  const preset = presetOf(f.preset);
-  const root = h("div", {});
-  root.append(h("div", { class: "row", style: "margin-top:16px" },
-    h("button", { onclick: () => { state.view = "list"; render(); } }, "← All nodes"),
-    h("strong", {}, isNew ? "New System One node" : (f.name || f.prefix || f.preset))));
-
-  // Settings
-  const settings = h("div", { class: "panel" }, h("h2", {}, "Settings"));
-  const presetSelect = h("select", { onchange: e => {
+function nodeSettings(ed, refresh) {
+  const f = ed.form, preset = presetOf(f.preset);
+  const presetSelect = h("select", { class: "input", style: "width:100%", onchange: e => {
     f.preset = e.target.value;
     const p = presetOf(f.preset);
     if (p && !f.prefix) f.prefix = f.preset;
     if (p && !f.name) f.name = p.name;
-    render();
+    refresh();
   } }, h("option", { value: "" }, "Custom node"), state.presets.map(p => h("option", { value: p.preset }, p.name + " (" + p.preset + ")")));
   presetSelect.value = f.preset;
-  settings.append(
+
+  const keys = h("div", { class: "field" }, h("label", {}, "API keys"),
+    f.keys.map((k, i) => h("div", { class: "row" },
+      h("input", { class: "input mono", type: "password", value: k, placeholder: "sk-…", autocomplete: "off", "aria-label": "API key", oninput: e => { f.keys[i] = e.target.value; } }),
+      h("button", { type: "button", class: "iconBtn", "aria-label": "Remove key", onclick: () => { f.keys.splice(i, 1); if (!f.keys.length) f.keys.push(""); refresh(); } }, icon("close", 16)))),
+    h("div", {}, h("button", { type: "button", class: "btn sm", onclick: () => { f.keys.push(""); refresh(); } }, icon("plus", 14), "Add key")),
+    h("p", { class: "hint" }, preset && !preset.key_required ? "Optional. This preset works without a key." : "Optional. Each key is sent as a Bearer token. With several keys, requests take turns, and when a key gets 401, 402, 403, 429 or a 5xx error the request moves on to the next key."));
+
+  const headers = h("div", { class: "field" }, h("label", {}, "Headers"),
+    f.headers.map((row, i) => h("div", { class: "row" },
+      bind(row, "k", { placeholder: "Header", "aria-label": "Header name" }), bind(row, "v", { placeholder: "Value", "aria-label": "Header value" }),
+      h("button", { type: "button", class: "iconBtn", "aria-label": "Remove header", onclick: () => { f.headers.splice(i, 1); refresh(); } }, icon("close", 16)))),
+    h("div", {}, h("button", { type: "button", class: "btn sm", onclick: () => { f.headers.push({ k: "", v: "" }); refresh(); } }, icon("plus", 14), "Add header")),
+    h("p", { class: "hint" }, "Extra headers sent with every request. Write {session} in a value to send a new random id each time." + (preset && Object.keys(preset.headers || {}).length ? " The preset already sends " + Object.keys(preset.headers).join(", ") + "." : "")));
+
+  return h("div", { class: "block" },
+    h("h3", { class: "subTitle" }, "Settings"),
     h("div", { class: "grid2" },
-      field("Type", presetSelect, preset ? "Preset fills URL, headers and models; any value below overrides it." : "Any server that implements the System One decision API."),
+      field("Type", presetSelect, preset ? "The preset fills in the URL, headers and models. Anything you enter here replaces the preset's value." : "Use this for any server that implements the System One decision API."),
       field("Name", bind(f, "name", { placeholder: preset ? preset.name : "Local server" })),
-      field("Prefix", bind(f, "prefix", { placeholder: f.preset || "local" }), "Clients call model \"<prefix>/<model>\"."),
-      field("URL", bind(f, "url", { placeholder: preset ? preset.url : "http://127.0.0.1:8000/v1/systemone" }), "Full decision endpoint. The runtime POSTs JSON to it as-is."),
-      field("Proxy URL", bind(f, "proxy", { placeholder: "empty = global proxy · direct · socks5://host:1080" })),
-      field("Status", h("label", { class: "row", style: "font-weight:500" }, h("input", { type: "checkbox", checked: !f.disabled, onchange: e => { f.disabled = !e.target.checked; } }), "Enabled"))));
-
-  const keys = h("div", {}, h("h3", {}, "API keys"), h("div", { class: "hint" }, preset && !preset.key_required ? "Optional: this lane works without a key." : "Optional. Sent as Bearer; several keys rotate and fall back on 401/402/403/429/5xx."));
-  f.keys.forEach((k, i) => keys.append(h("div", { class: "sub1" },
-    h("input", { type: "password", value: k, placeholder: "sk-…", autocomplete: "off", oninput: e => { f.keys[i] = e.target.value; } }),
-    h("button", { onclick: () => { f.keys.splice(i, 1); if (!f.keys.length) f.keys.push(""); render(); } }, "Remove"))));
-  keys.append(h("button", { style: "margin-top:6px", onclick: () => { f.keys.push(""); render(); } }, "Add key"));
-
-  const headers = h("div", {}, h("h3", {}, "Headers"), h("div", { class: "hint" }, "Extra request headers. Value {session} becomes a random id per request." + (preset && Object.keys(preset.headers || {}).length ? " Preset sends: " + Object.keys(preset.headers).join(", ") + "." : "")));
-  f.headers.forEach((row, i) => headers.append(h("div", { class: "sub" },
-    bind(row, "k", { placeholder: "Header" }), bind(row, "v", { placeholder: "Value" }),
-    h("button", { onclick: () => { f.headers.splice(i, 1); render(); } }, "Remove"))));
-  headers.append(h("button", { style: "margin-top:6px", onclick: () => { f.headers.push({ k: "", v: "" }); render(); } }, "Add header"));
-
-  const checkModel = h("input", { placeholder: "model id for Check (optional)", style: "max-width:260px" });
-  const fc = state.formCheck;
-  settings.append(h("div", { class: "grid2" }, keys, headers),
-    h("div", { class: "row", style: "margin-top:16px" },
-      h("button", { class: "primary", disabled: state.busy === "save", onclick: saveForm }, isNew ? "Create node" : "Save"),
-      checkModel,
-      h("button", { disabled: state.busy === "check", onclick: async () => {
-        const err = validateForm(f, state.editIndex); if (err) return toast(err);
-        state.busy = "check"; render();
-        state.formCheck = await checkNode(state.editIndex, f, checkModel.value.trim());
-        state.busy = ""; render();
-      } }, state.busy === "check" ? "Checking…" : "Check"),
-      fc ? (fc.valid ? h("span", { class: "ok" }, "✓ OK · " + fc.method + latencyText(fc) + (fc.health && fc.health.device ? " · " + fc.health.device : "")) : h("span", { class: "bad" }, "✗ " + (fc.error || "Failed") + latencyText(fc))) : null));
-  root.append(settings);
-
-  root.append(renderModels(f), renderExample(f));
-  return root;
+      field("Prefix", bind(f, "prefix", { placeholder: f.preset || "local" }), "Clients pick this node by asking for the model \"<prefix>/<model>\"."),
+      field("URL", bind(f, "url", { class: "input mono", placeholder: preset ? preset.url : "http://127.0.0.1:8000/v1/systemone" }), "The full decision endpoint. Requests are posted to it unchanged."),
+      field("Proxy URL", bind(f, "proxy", { class: "input mono", placeholder: "socks5://host:1080" }), "Empty uses the global proxy. Write direct to skip every proxy."),
+      field("Status", h("label", { class: "check" }, h("input", { type: "checkbox", checked: !f.disabled, onchange: e => { f.disabled = !e.target.checked; } }), "Enabled"))),
+    keys, headers);
 }
-
-async function saveForm() {
-  const f = state.form;
-  const err = validateForm(f, state.editIndex);
-  if (err) return toast(err);
-  const nodes = state.config.nodes.slice();
-  const n = fromForm(f);
-  if (!n.prefix) delete n.prefix;
-  if (state.editIndex < 0) nodes.push(n); else nodes[state.editIndex] = n;
-  state.busy = "save"; render();
-  try {
-    await saveNodes(nodes);
-    if (state.editIndex < 0) state.editIndex = nodes.length - 1;
-    toast("Saved. CLIProxyAPI reloads the plugin config automatically.");
-  } catch (e) { toast(e.message); }
-  state.busy = ""; render();
-}
-
-function renderModels(f) {
-  const panel = h("div", { class: "panel" });
-  const prefix = f.prefix.trim() || f.preset || "<prefix>";
+function nodeModels(ed, refresh, run) {
+  const f = ed.form, prefix = prefixOf(f) || "<prefix>";
   const presetModels = !f.models.length && presetOf(f.preset) ? presetOf(f.preset).models : null;
-  panel.append(h("div", { class: "row spread" }, h("h2", { style: "margin:0" }, "Models"),
-    h("div", { class: "row" },
-      h("button", { disabled: state.busy === "fetch", onclick: fetchFromApi }, state.busy === "fetch" ? "Fetching…" : "Fetch from API"))));
-  panel.append(h("div", { class: "hint" }, f.models.length ? "Only these models are accepted. Remember to Save." :
-    presetModels ? "Using the preset's models. Add models here to override them." : "No models listed: any model under this prefix is accepted. Add models to restrict and to list them in /v1/models."));
-
   const rows = f.models.length ? f.models : (presetModels || []).map(m => ({ id: m.id, name: m.name || "", preset: true }));
+  const block = h("div", { class: "block" },
+    h("div", { class: "row", style: "justify-content:space-between" }, h("h3", { class: "subTitle" }, "Models"),
+      h("button", { type: "button", class: "btn sm", disabled: ed.busy === "fetch", onclick: () => {
+        const err = validateForm(f, ed.index); if (err) return toast(err);
+        run("fetch", async () => {
+          try { const d = await call("POST", API + "/models", { node: nodeForApi(f) }); ed.fetched = d.error ? { error: d.error } : { models: d.models || [] }; }
+          catch (e) { ed.fetched = { error: e.message }; }
+        });
+      } }, ed.busy === "fetch" ? spinner(12) : icon("download", 14), "Fetch from server")),
+    h("p", { class: "hint" }, f.models.length ? "Only these models are accepted. Save to apply your changes."
+      : presetModels ? "The preset's models are used. Add models here to use your own list instead."
+      : "No models are listed, so any model under this prefix is accepted. Add models to limit that and to show them in /v1/models."));
   if (rows.length) {
-    const table = h("table", {}, h("tr", {}, h("th", {}, "Model (client)"), h("th", {}, "Upstream id"), h("th", {}, "Display name"), h("th", {})));
-    rows.forEach((m, i) => table.append(h("tr", {},
-      h("td", {}, h("code", {}, prefix + "/" + m.id)),
-      h("td", {}, m.preset ? m.id : bind(m, "id", {})),
-      h("td", {}, m.preset ? (m.name || "") : bind(m, "name", { placeholder: "optional" })),
-      h("td", {}, h("div", { class: "row" },
-        h("button", { onclick: () => { navigator.clipboard && navigator.clipboard.writeText(prefix + "/" + m.id); toast("Copied " + prefix + "/" + m.id); } }, "Copy"),
-        m.preset ? null : h("button", { class: "danger", onclick: () => { f.models.splice(i, 1); render(); } }, "Remove"))))));
-    panel.append(table);
+    block.append(h("div", { class: "tableWrap xscroll" }, h("table", { class: "table" },
+      h("thead", {}, h("tr", {}, ["Client model", "Display name", "Alias", ""].map(t => h("th", {}, t)))),
+      h("tbody", {}, rows.map((m, i) => h("tr", {},
+        td(h("span", { class: "keyLine" }, h("span", { class: "mono" }, prefix + "/" + m.id),
+          h("button", { type: "button", class: "iconBtn", title: "Copy", "aria-label": "Copy model name", onclick: () => copyText(prefix + "/" + m.id, "Model name") }, icon("copy", 14)))),
+        td(m.preset ? (m.name || "—") : bind(m, "name", { placeholder: "optional", style: "height:32px" }), "soft"),
+        td(m.preset ? "—" : bind(m, "alias", { placeholder: "optional", style: "height:32px" }), "soft"),
+        td(m.preset ? null : h("div", { class: "actions" }, h("button", { type: "button", class: "iconBtn", "aria-label": "Remove model", onclick: () => { f.models.splice(i, 1); refresh(); } }, icon("trash", 16))))))))));
   }
   const add = { id: "", name: "" };
-  panel.append(h("div", { class: "sub", style: "margin-top:10px" },
-    bind(add, "id", { placeholder: "model id, e.g. Winnow-12B" }), bind(add, "name", { placeholder: "display name (optional)" }),
-    h("button", { onclick: () => {
+  block.append(h("div", { class: "row" },
+    bind(add, "id", { class: "input mono", placeholder: "Model id, e.g. Winnow-12B", "aria-label": "Model id" }),
+    bind(add, "name", { placeholder: "Display name (optional)", "aria-label": "Display name" }),
+    h("button", { type: "button", class: "btn", onclick: () => {
       if (!add.id.trim()) return toast("Model id is required");
       if (f.models.some(m => m.id === add.id.trim())) return toast("Model already added");
-      f.models.push({ id: add.id.trim(), name: add.name.trim() }); render();
-    } }, "Add model")));
-
-  if (state.fetched) {
-    const box = h("div", { class: "q" });
-    if (state.fetched.error) box.append(h("div", { class: "bad" }, state.fetched.error));
-    else if (!state.fetched.models.length) box.append(h("div", { class: "muted" }, "The model API returned no models."));
+      f.models.push({ id: add.id.trim(), name: add.name.trim(), alias: "" }); refresh();
+    } }, "Add")));
+  if (ed.fetched) {
+    const box = h("div", { class: "box" });
+    if (ed.fetched.error) box.append(h("p", { class: "formError" }, ed.fetched.error));
+    else if (!ed.fetched.models.length) box.append(h("p", { class: "muted" }, "The server returned no models."));
     else {
-      const picks = new Set(state.fetched.models.filter(m => !f.models.some(x => x.id === m.id)).map(m => m.id));
-      box.append(h("div", { class: "muted" }, state.fetched.models.length + " model(s) from " + state.fetched.url));
-      for (const m of state.fetched.models) {
+      const picks = new Set(ed.fetched.models.filter(m => !f.models.some(x => x.id === m.id)).map(m => m.id));
+      box.append(h("p", { class: "hint" }, `${plural(ed.fetched.models.length, "model")} on the server`));
+      for (const m of ed.fetched.models) {
         const have = f.models.some(x => x.id === m.id);
-        box.append(h("label", { class: "row", style: "font-weight:400" },
+        box.append(h("label", { class: "check" },
           h("input", { type: "checkbox", checked: !have, disabled: have, onchange: e => { e.target.checked ? picks.add(m.id) : picks.delete(m.id); } }),
-          h("code", {}, m.id), m.name ? h("span", { class: "muted" }, m.name) : null, have ? h("span", { class: "chip" }, "added") : null));
+          h("span", { class: "mono" }, m.id), m.name ? h("span", { class: "muted" }, m.name) : null, have ? h("span", { class: "pill muted" }, "Added") : null));
       }
-      box.append(h("div", { class: "row", style: "margin-top:8px" },
-        h("button", { class: "primary", onclick: () => {
-          for (const m of state.fetched.models) if (picks.has(m.id)) f.models.push({ id: m.id, name: m.name || "" });
-          state.fetched = null; render(); toast("Models added. Remember to Save.");
+      box.append(h("div", { class: "row" },
+        h("button", { type: "button", class: "btn sm primary", onclick: () => {
+          for (const m of ed.fetched.models) if (picks.has(m.id)) f.models.push({ id: m.id, name: m.name || "", alias: "" });
+          ed.fetched = null; refresh(); toast("Models added. Save to keep them.", true);
         } }, "Add selected"),
-        h("button", { onclick: () => { state.fetched = null; render(); } }, "Close")));
+        h("button", { type: "button", class: "btn sm ghost", onclick: () => { ed.fetched = null; refresh(); } }, "Close")));
     }
-    panel.append(box);
+    block.append(box);
   }
-  return panel;
+  return block;
 }
-async function fetchFromApi() {
-  const f = state.form;
-  const err = validateForm(f, state.editIndex); if (err) return toast(err);
-  state.busy = "fetch"; render();
-  const node = nodeForApi(f);
-  const base = (f.url || (presetOf(f.preset) || {}).url || "").replace(/\/+$/, "");
-  const url = base.endsWith("/models") ? base : base.replace(/\/systemone$/, "") + "/models";
-  try {
-    const d = (await call("POST", API + "/models", { node })).data;
-    state.fetched = d.error ? { error: d.error } : { models: d.models || [], url };
-  } catch (e) { state.fetched = { error: e.message }; }
-  state.busy = ""; render();
-}
-
-function renderExample(f) {
-  const ex = state.example;
-  const panel = h("div", { class: "panel" }, h("h2", {}, "Example"));
-  const models = effectiveModels(f);
+function nodeExample(ed, refresh, run) {
+  const f = ed.form, ex = ed.example, models = effectiveModels(f), prefix = prefixOf(f) || "<prefix>";
   if (!ex.model && models.length) ex.model = models[0].id;
-  const prefix = f.prefix.trim() || f.preset || "<prefix>";
-
   const modelInput = models.length
-    ? h("select", { onchange: e => { ex.model = e.target.value; render(); } }, models.map(m => h("option", { value: m.id }, prefix + "/" + m.id + (m.name ? " — " + m.name : ""))))
-    : bind(ex, "model", { placeholder: "model id" });
+    ? h("select", { class: "input", style: "width:100%", onchange: e => { ex.model = e.target.value; refresh(); } }, models.map(m => h("option", { value: m.id }, prefix + "/" + m.id + (m.name ? " — " + m.name : ""))))
+    : bind(ex, "model", { class: "input mono", placeholder: "Model id" });
   if (models.length) modelInput.value = ex.model;
 
-  panel.append(h("div", { class: "grid2" },
-    field("Model", modelInput),
-    field("State", h("textarea", { value: ex.state, oninput: e => { ex.state = e.target.value; } }), "Plain text, or JSON object/array.")));
-
-  panel.append(h("h3", {}, "Questions"));
-  ex.questions.forEach((q, qi) => {
-    const typeSel = h("select", { onchange: e => { q.type = e.target.value; render(); } }, QUESTION_TYPES.map(t => h("option", { value: t }, t)));
+  const questions = ex.questions.map((q, qi) => {
+    const typeSel = h("select", { class: "input", "aria-label": "Question type", onchange: e => { q.type = e.target.value; refresh(); } }, QUESTION_TYPES.map(t => h("option", { value: t }, t)));
     typeSel.value = q.type;
-    const box = h("div", { class: "q" },
-      h("div", { class: "sub" }, bind(q, "name", { placeholder: "is_urgent" }), typeSel,
-        h("button", { onclick: () => { ex.questions.splice(qi, 1); if (!ex.questions.length) ex.questions.push(blankQuestion()); render(); } }, "Remove")),
-      h("div", { style: "margin-top:6px" }, bind(q, "instructions", { placeholder: "What should this question decide?" })));
+    const box = h("div", { class: "box" },
+      h("div", { class: "row" }, bind(q, "name", { class: "input mono", placeholder: "is_urgent", "aria-label": "Question name" }), typeSel,
+        h("button", { type: "button", class: "iconBtn", "aria-label": "Remove question", onclick: () => { ex.questions.splice(qi, 1); if (!ex.questions.length) ex.questions.push(blankQuestion()); refresh(); } }, icon("close", 16))),
+      bind(q, "instructions", { placeholder: "What should this question decide?", "aria-label": "Instructions" }));
     if (q.type === "choice") {
-      q.choices.forEach((r, ri) => box.append(h("div", { class: "sub" }, bind(r, "label", { placeholder: "label" }), bind(r, "description", { placeholder: "description" }),
-        h("button", { onclick: () => { q.choices.splice(ri, 1); render(); } }, "Remove option"))));
-      box.append(h("button", { style: "margin-top:6px", onclick: () => { q.choices.push({ label: "", description: "" }); render(); } }, "Add option"));
+      q.choices.forEach((r, ri) => box.append(h("div", { class: "row" }, bind(r, "label", { placeholder: "Label" }), bind(r, "description", { placeholder: "Description" }),
+        h("button", { type: "button", class: "iconBtn", "aria-label": "Remove option", onclick: () => { q.choices.splice(ri, 1); refresh(); } }, icon("close", 16)))));
+      box.append(h("div", {}, h("button", { type: "button", class: "btn sm", onclick: () => { q.choices.push({ label: "", description: "" }); refresh(); } }, icon("plus", 14), "Add option")));
     } else if (q.type === "score") {
-      q.levels.forEach((l, li) => box.append(h("div", { class: "sub1" },
-        h("input", { value: l, placeholder: "level " + li, oninput: e => { q.levels[li] = e.target.value; } }),
-        h("button", { onclick: () => { q.levels.splice(li, 1); render(); } }, "Remove level"))));
-      box.append(h("button", { style: "margin-top:6px", onclick: () => { q.levels.push(""); render(); } }, "Add level"));
-    } else {
-      box.append(h("div", { class: "hint" }, "noul returns the probability that the answer is yes."));
-    }
-    panel.append(box);
+      q.levels.forEach((l, li) => box.append(h("div", { class: "row" },
+        h("input", { class: "input", value: l, placeholder: "Level " + li, oninput: e => { q.levels[li] = e.target.value; } }),
+        h("button", { type: "button", class: "iconBtn", "aria-label": "Remove level", onclick: () => { q.levels.splice(li, 1); refresh(); } }, icon("close", 16)))));
+      box.append(h("div", {}, h("button", { type: "button", class: "btn sm", onclick: () => { q.levels.push(""); refresh(); } }, icon("plus", 14), "Add level")));
+    } else box.append(h("p", { class: "hint" }, "noul returns the probability that the answer is yes."));
+    return box;
   });
-  panel.append(h("button", { style: "margin-top:8px", onclick: () => { ex.questions.push(blankQuestion()); render(); } }, "Add question"));
 
   const request = { model: prefix + "/" + (ex.model || "<model>"), ...examplePayload(ex) };
   const curl = "curl " + location.origin + "/v1/chat/completions \\\n  -H 'Authorization: Bearer <api-key>' \\\n  -H 'Content-Type: application/json' \\\n  -d '" + JSON.stringify(request).replace(/'/g, "'\\''") + "'";
-  const r = state.testResult;
-  panel.append(
-    h("div", { class: "row", style: "margin-top:12px" },
-      h("button", { class: "primary", disabled: state.busy === "test", onclick: sendTest }, state.busy === "test" ? "Sending…" : "Send"),
-      h("span", { class: "muted" }, "Saved nodes go through /v1/chat/completions and show up in Usage; unsaved changes are sent to the node directly."),
-      r ? h("span", { class: r.ok ? "ok" : "bad" }, (r.ok ? "✓ " : "✗ ") + r.status + (r.latency_ms !== undefined ? " · " + r.latency_ms + " ms" : "")) : null),
-    h("div", { class: "grid2", style: "margin-top:12px" },
-      h("div", {}, h("h3", {}, "Request"), h("pre", {}, JSON.stringify(request, null, 2)), h("h3", {}, "curl"), h("pre", {}, curl)),
-      h("div", {}, h("h3", {}, "Response"), h("pre", {}, r ? (r.ok ? JSON.stringify(r.response, null, 2) : r.error) : "—"))));
-  return panel;
-}
-async function sendTest() {
-  const f = state.form, ex = state.example;
-  const err = validateForm(f, state.editIndex) || questionsReady(ex.questions) || (!ex.model.trim() ? "Model is required" : "");
-  if (err) return toast(err);
-  state.busy = "test"; render();
-  try {
-    state.testResult = savedAsIs(state.editIndex, f)
-      ? await proxyCall({ model: (f.prefix.trim() || f.preset) + "/" + ex.model.trim(), ...examplePayload(ex) })
-      : (await call("POST", API + "/test", { node: nodeForApi(f), model: ex.model.trim(), payload: examplePayload(ex) })).data;
-  }
-  catch (e) { state.testResult = { ok: false, status: 0, error: e.message }; }
-  state.busy = ""; render();
-}
-
-// --- auth ---
-function showAuth(msg) {
-  const box = document.getElementById("auth");
-  const input = h("input", { type: "password", placeholder: "Management key", autocomplete: "off" });
-  const go = async () => {
-    state.key = input.value.trim(); if (!state.key) return;
-    try { await load(); storageSet(KEY_STORE, state.key); state.keySource = "local"; box.style.display = "none"; renderTop(); } catch (e) { toast(e.message === "unauthorized" ? "Management key rejected." : e.message); }
+  const r = ed.test;
+  const send = () => {
+    const err = validateForm(f, ed.index) || questionsReady(ex.questions) || (!ex.model.trim() ? "Model is required" : "");
+    if (err) return toast(err);
+    run("test", async () => {
+      try {
+        ed.test = savedAsIs(ed.index, f)
+          ? await proxyCall({ model: prefixOf(f) + "/" + ex.model.trim(), ...examplePayload(ex) })
+          : await call("POST", API + "/test", { node: nodeForApi(f), model: ex.model.trim(), payload: examplePayload(ex) });
+      } catch (e) { ed.test = { ok: false, status: 0, error: e.message }; }
+    });
   };
-  input.addEventListener("keydown", e => { if (e.key === "Enter") go(); });
-  box.replaceChildren(h("h2", {}, "Management key"), h("div", { class: "muted" }, msg || "Enter the CLIProxyAPI management key to manage System One nodes."),
-    h("div", { class: "sub1" }, input, h("button", { class: "primary", onclick: go }, "Connect")));
-  box.style.display = "block";
-  document.getElementById("app").replaceChildren();
-  state.config = null; renderTop();
+  return h("div", { class: "block" },
+    h("h3", { class: "subTitle" }, "Test decision"),
+    h("p", { class: "hint" }, "Saved nodes are called through /v1/chat/completions, so the request shows up in usage. Unsaved changes are sent straight to the node."),
+    field("Model", modelInput),
+    field("State", h("textarea", { class: "input", value: ex.state, oninput: e => { ex.state = e.target.value; } }), "Plain text, or a JSON object or array."),
+    h("div", { class: "field" }, h("label", {}, "Questions"), questions,
+      h("div", {}, h("button", { type: "button", class: "btn sm", onclick: () => { ex.questions.push(blankQuestion()); refresh(); } }, icon("plus", 14), "Add question"))),
+    h("div", { class: "row" },
+      h("button", { type: "button", class: "btn primary", disabled: ed.busy === "test", onclick: send }, ed.busy === "test" ? spinner(14) : null, "Send"),
+      r ? h("span", { class: r.ok ? "pill" : "pill bad" }, (r.ok ? "OK " : "Failed ") + (r.status || "") + (r.latency_ms !== undefined ? " · " + r.latency_ms + " ms" : "")) : null),
+    r ? field("Response", h("pre", { class: "code" }, r.ok ? JSON.stringify(r.response, null, 2) : r.error)) : null,
+    field("Request", h("pre", { class: "code" }, JSON.stringify(request, null, 2))),
+    h("div", { class: "field" }, h("div", { class: "row", style: "justify-content:space-between" }, h("label", {}, "curl"),
+      h("button", { type: "button", class: "iconBtn", title: "Copy", "aria-label": "Copy curl", onclick: () => copyText(curl, "curl command") }, icon("copy", 14))),
+      h("pre", { class: "code" }, curl)));
 }
 
-// When the panel does not remember the password, the key only lives in the parent page's memory.
-// Its API client sends it as an XHR Authorization header, so capture the header from the parent's
-// next request (triggered via its plugin refresh event) and keep it in the tab's sessionStorage.
-// The refresh remounts this iframe, so the reloaded page picks the key up from sessionStorage.
-const SESSION_KEY = "systemone:session-key";
-const CAPTURE_FLAG = "systemone:capture-attempted";
-function captureParentKey(timeoutMs) {
-  return new Promise(resolve => {
-    let win;
-    try { win = window.parent; if (!win || win === window || !win.XMLHttpRequest) return resolve(""); } catch { return resolve(""); }
-    const proto = win.XMLHttpRequest.prototype;
-    const original = proto.setRequestHeader;
-    let done = false;
-    const finish = key => {
-      if (done) return;
-      done = true;
-      if (proto.setRequestHeader === wrapper) proto.setRequestHeader = original;
-      resolve(key);
-    };
-    function wrapper(name, value) {
-      if (String(name).toLowerCase() === "authorization" && /^Bearer\s+\S/i.test(String(value))) {
-        const key = String(value).replace(/^Bearer\s+/i, "");
-        try { win.sessionStorage.setItem(SESSION_KEY, key); } catch {}
-        finish(key);
-      }
-      return original.apply(this, arguments);
-    }
-    proto.setRequestHeader = wrapper;
-    try { win.dispatchEvent(new win.Event("plugin-resources-refresh")); } catch {}
-    setTimeout(() => finish(""), timeoutMs);
-  });
+// ================= Hugging Face =================
+async function loadHF(withIndex) {
+  const hf = state.hf;
+  const jobs = [call("GET", API + "/hf/status").then(d => { hf.status = d; }), call("GET", API + "/hf/machine").then(d => { hf.machine = d; })];
+  if (withIndex !== false && (!hf.index || withIndex === "refresh"))
+    jobs.push(call("GET", API + "/hf/index" + (withIndex === "refresh" ? "?refresh=1" : "")).then(d => { hf.index = d; hf.indexError = ""; }, e => { hf.indexError = e.message; }));
+  await Promise.all(jobs.map(p => p.catch(e => { if (e.message !== "unauthorized") toast(e.message); })));
+  render();
+  pollHF();
 }
-function sessionGet(k) { try { return sessionStorage.getItem(k) || ""; } catch { return ""; } }
-function sessionSet(k, v) { try { v ? sessionStorage.setItem(k, v) : sessionStorage.removeItem(k); } catch {} }
+// While a download runs, progress and free disk space are refreshed every two seconds.
+function pollHF() {
+  clearTimeout(pollHF.timer);
+  const running = state.hf.status && state.hf.status.downloads.some(d => d.status === "running");
+  if (running) pollHF.timer = setTimeout(() => { if (ui.content) loadHF(false); }, 2000);
+}
 
-// Prefer the management UI session; fall back to a key entered here earlier, then ask.
-async function tryKey(key, source) {
-  if (!key) return false;
-  state.key = key; state.keySource = source;
-  try { await load(); return true; } catch (e) { if (e.message !== "unauthorized") { toast(e.message); return true; } }
-  return false;
+// need estimates the memory a model takes to run at the chosen precision: its weights plus 20% for the
+// KV cache and runtime. It is a rough guide.
+const precisionOf = () => PRECISIONS.find(p => p[0] === state.hf.precision) || PRECISIONS[0];
+const need = params => params * precisionOf()[2] * 1.2;
+function gpuMemory(m) { return (m && m.gpus || []).reduce((n, g) => n + g.memory_total, 0); }
+function fitOf(params) {
+  const m = state.hf.machine;
+  if (!params || !m) return ["Unknown", "muted", "unknown"];
+  const bytes = need(params);
+  if (gpuMemory(m) >= bytes) return ["Fits GPU", "", "gpu"];
+  if (m.ram_total >= bytes) return [gpuMemory(m) ? "RAM only" : "CPU + RAM", "warn", "ram"];
+  return ["Too large", "bad", "none"];
 }
-async function start() {
-  if (await tryKey(managementSessionKey(), "session")) return;
-  if (await tryKey(sessionGet(SESSION_KEY), "session")) { sessionSet(CAPTURE_FLAG, ""); return; }
-  if (await tryKey(storageGet(KEY_STORE), "local")) return;
-  if (!sessionGet(CAPTURE_FLAG)) {
-    sessionSet(CAPTURE_FLAG, "1");
-    if (await tryKey(await captureParentKey(3000), "session")) { sessionSet(CAPTURE_FLAG, ""); return; }
+function renderHF() {
+  const hf = state.hf, m = hf.machine;
+  const out = [];
+  if (m) {
+    const gpuMem = gpuMemory(m);
+    out.push(h("div", { class: "statsRow" },
+      tile("CPU", plural(m.cores, "core"), m.cpu || `${m.os}/${m.arch}`, "var(--viz-requests)"),
+      tile("Memory", fmtBytes(m.ram_total), `${fmtBytes(m.ram_available)} available now`, "var(--viz-success)", m.ram_total ? 100 * (1 - m.ram_available / m.ram_total) : 0),
+      tile("GPU", m.gpus.length ? fmtBytes(gpuMem) : "None", m.gpus.length ? m.gpus.map(g => g.name).join(", ") : "No NVIDIA GPU found, so models run on the CPU", m.gpus.length ? "var(--viz-success)" : "var(--amber-color)"),
+      tile("Disk free", m.disk_total ? fmtBytes(m.disk_free) : "—", m.disk_total ? `of ${fmtBytes(m.disk_total)} in ${m.disk_path}` : m.disk_path, m.disk_free && m.disk_free < 20 * 2 ** 30 ? "var(--viz-failure)" : "var(--viz-requests)", m.disk_total ? 100 * (1 - m.disk_free / m.disk_total) : undefined)));
   }
-  showAuth("Open this page from the management panel while signed in, or enter the management key.");
+  out.push(tokenSection());
+  const rows = downloadRows();
+  if (rows.length) out.push(downloadsSection(rows));
+  out.push(indexSection());
+  return out;
 }
+
+function tokenSection() {
+  const st = state.hf.status, token = state.config.token;
+  const input = h("input", { class: "input mono", type: "password", placeholder: token ? "hf_… (saved, enter a new one to replace it)" : "hf_…", autocomplete: "off", "aria-label": "Hugging Face token" });
+  const save = async btn => {
+    const value = input.value.trim();
+    if (!value) return toast("Enter a token first");
+    btn.disabled = true;
+    try {
+      await call("PUT", CONFIG_PATH + "/huggingface-token", value);
+      state.config.token = value; input.value = "";
+      toast("Token saved", true);
+      setTimeout(() => loadHF(false), 1500); // the plugin picks the config up a moment later
+    } catch (e) { toast(e.message); }
+    btn.disabled = false;
+  };
+  let status;
+  if (!st) status = h("span", { class: "pill muted" }, "Loading");
+  else if (st.token_error) status = h("span", { class: "pill bad", title: st.token_error }, "Token rejected");
+  else if (st.token_set) status = h("span", { class: "pill" }, "Signed in as " + (st.user || "?"));
+  else status = h("span", { class: "pill muted" }, "No token");
+  const saveBtn = h("button", { type: "button", class: "btn primary", onclick: () => save(saveBtn) }, "Save");
+  input.addEventListener("keydown", e => { if (e.key === "Enter") save(saveBtn); });
+  return section("huggingface-token", "Hugging Face token",
+    "Public models download without a token. Gated and private models need a token from huggingface.co/settings/tokens with read access, and for gated models the account must have accepted the model's license. The token is saved in config.yaml.",
+    h("div", { class: "panel" },
+      h("div", { class: "row" }, status, st && st.token_error ? h("span", { class: "hint bad" }, st.token_error) : null),
+      h("div", { class: "row" }, input, saveBtn,
+        token ? h("button", { type: "button", class: "btn ghost dangerText", onclick: () => confirmDialog("Remove token", ["Remove the Hugging Face token? Gated and private models can no longer be downloaded."], "Remove", async () => {
+          await call("DELETE", CONFIG_PATH + "/huggingface-token");
+          state.config.token = "";
+          setTimeout(() => loadHF(false), 1500);
+        }) }, "Remove") : null)));
+}
+
+// downloadRows merges this session's downloads with the model folders already on disk.
+function downloadRows() {
+  const st = state.hf.status;
+  if (!st) return [];
+  const rows = new Map();
+  for (const l of st.local) rows.set(l.repo, { repo: l.repo, path: l.path, local: l });
+  for (const d of st.downloads) rows.set(d.repo, { ...(rows.get(d.repo) || {}), repo: d.repo, path: d.path, job: d });
+  return [...rows.values()];
+}
+function downloadsSection(rows) {
+  const head = h("thead", {}, h("tr", {}, ["Model", "Progress", "Status", ""].map(t => h("th", {}, t))));
+  return section("models-dir", "Downloaded models", `Models are saved in ${state.hf.status.models_dir}. A stopped download keeps its partial files and continues where it left off when you download again.`,
+    h("div", { class: "tableWrap xscroll" }, h("table", { class: "table" }, head, h("tbody", {}, rows.map(r => {
+      const j = r.job, l = r.local;
+      let status, progress;
+      if (j && j.status === "running") {
+        const pct = j.total ? 100 * j.done / j.total : 0;
+        status = h("span", { class: "pill warn" }, spinner(10), " " + pct.toFixed(0) + "%");
+        progress = h("div", { class: "usageCell" }, h("span", { class: "num" }, `${fmtBytes(j.done)} of ${fmtBytes(j.total)}`),
+          h("div", { class: "meter", style: "--meter-fill:var(--viz-success);width:180px" }, h("i", { style: `width:${pct}%` })),
+          j.file ? h("span", { class: "sub ellipsis", title: j.file }, j.file) : null);
+      } else {
+        const failed = j && j.status === "failed", canceled = j && j.status === "canceled";
+        status = failed ? h("span", { class: "pill bad", title: j.error }, "Failed") : canceled || (l && l.partial) ? h("span", { class: "pill muted" }, "Incomplete") : h("span", { class: "pill" }, "Ready");
+        progress = h("div", { class: "usageCell" }, h("span", { class: "num" }, l ? `${fmtBytes(l.size)} · ${plural(l.files, "file")}` : "—"),
+          failed ? h("span", { class: "sub bad" }, j.error) : null);
+      }
+      const running = j && j.status === "running";
+      return h("tr", {},
+        td(h("div", { class: "keyCell" }, h("b", {}, r.repo), h("span", { class: "keyLine" }, h("span", { class: "ellipsis", title: r.path }, r.path),
+          h("button", { type: "button", class: "iconBtn", title: "Copy path", "aria-label": "Copy path", onclick: () => copyText(r.path, "Path") }, icon("copy", 14))))),
+        td(progress), td(status),
+        td(h("div", { class: "actions" },
+          running ? h("button", { type: "button", class: "btn sm", onclick: async () => { await call("POST", API + "/hf/cancel", { repo: r.repo }).catch(e => toast(e.message)); loadHF(false); } }, "Stop")
+            : h("button", { type: "button", class: "btn sm", onclick: () => openRepo(r.repo) }, l && !l.partial && !(j && j.status !== "done") ? "Files" : "Resume"),
+          running ? null : h("button", { type: "button", class: "iconBtn", title: "Delete", "aria-label": "Delete model", onclick: () => confirmDialog("Delete model", [`Delete ${r.repo} and all its files from ${r.path}?`], "Delete", async () => {
+            await call("POST", API + "/hf/delete", { repo: r.repo }); toast("Model deleted", true); loadHF(false);
+          }) }, icon("trash", 16)))));
+    })))));
+}
+
+function indexSection() {
+  const hf = state.hf;
+  const search = h("input", { class: "input", type: "search", placeholder: "Search models", value: hf.q, style: "max-width:320px", "aria-label": "Search models", oninput: e => { hf.q = e.target.value; renderIndexTable(); } });
+  const precision = h("div", { class: "segmented", role: "group", "aria-label": "Precision", title: "Precision used to estimate memory" }, PRECISIONS.map(([id, label]) =>
+    h("button", { type: "button", class: "segment" + (hf.precision === id ? " on" : ""), "aria-pressed": String(hf.precision === id), onclick: () => { hf.precision = id; storageSet(PRECISION_STORE, id); render(); } }, label)));
+  const filters = h("div", { class: "segmented" }, [["all", "All"], ["gpu", "Fits GPU"], ["ram", "Fits this machine"]].map(([id, label]) =>
+    h("button", { type: "button", class: "segment" + (hf.fit === id ? " on" : ""), onclick: () => { hf.fit = id; render(); } }, label)));
+  ui.indexTable = h("div", { class: "tableWrap xscroll" });
+  renderIndexTable();
+  const idx = hf.index;
+  return section("Jev Decision Index", "Decision models on Hugging Face",
+    h("span", {}, "Models from the ", h("a", { class: "link", href: (idx && idx.source) || "https://huggingface.co/spaces/multimodalart/jev-decision-index", target: "_blank", rel: "noopener" }, "Jev Decision Index"),
+      " that publish their weights, best score first. Score is the index's balanced skill score and latency is its median per decision. Memory is a rough estimate for the precision you pick (BF16 is the unquantized model, Q8 and Q4 are quantized builds), compared with the machine above. Downloads are the repository's own files, usually BF16, so a quantized run needs a converted or quantized build.",
+      idx && idx.generated ? ` Index updated ${dateTimeFmt.format(new Date(idx.generated))}.` : ""),
+    h("div", { class: "row wrap" }, search, h("div", { class: "row" }, h("span", { class: "hint" }, "Precision"), precision), filters,
+      h("button", { type: "button", class: "btn", "aria-label": "Reload index", title: "Reload index", onclick: () => { hf.index = null; render(); loadHF("refresh"); } }, icon("refresh", 16))),
+    ui.indexTable);
+}
+function renderIndexTable() {
+  const hf = state.hf, cols = 8;
+  const head = h("thead", {}, h("tr", {}, [["Rank", "r"], ["Model"], ["Params", "r"], ["Memory", "r"], ["Score", "r"], ["Latency", "r"], ["Fit"], [""]].map(([t, c]) => h("th", { class: c || "" }, t))));
+  const empty = text => put(ui.indexTable, h("table", { class: "table" }, head, h("tbody", {}, h("tr", {}, td(text, "empty", { colspan: cols })))));
+  if (hf.indexError) return empty("Could not load the index: " + hf.indexError);
+  if (!hf.index) return empty("Loading the Jev Decision Index…");
+  const q = hf.q.trim().toLowerCase();
+  const local = new Set(downloadRows().map(r => r.repo));
+  // Rank is the place by score among all listed models, so it stays the same when searching or filtering.
+  const rank = new Map(hf.index.models.map((x, i) => [x.repo, i + 1]));
+  const list = hf.index.models.filter(x => {
+    if (q && !(x.name + " " + x.repo + " " + (x.base_model || "")).toLowerCase().includes(q)) return false;
+    const fit = fitOf(x.params)[2];
+    return hf.fit === "all" || (hf.fit === "gpu" ? fit === "gpu" : fit === "gpu" || fit === "ram");
+  });
+  if (!list.length) return empty("No models match.");
+  const shown = hf.limit ? list.slice(0, hf.limit) : list;
+  put(ui.indexTable, h("table", { class: "table" }, head, h("tbody", {}, shown.map(x => {
+    const [fit, tone] = fitOf(x.params);
+    return h("tr", { class: "click", onclick: () => openRepo(x.repo, x) },
+      td("#" + rank.get(x.repo), "r num soft"),
+      td(h("div", { class: "keyCell" }, h("b", { class: "ellipsis", title: x.name }, x.name),
+        h("span", { class: "keyLine" }, h("span", { class: "ellipsis", title: x.repo }, x.repo)))),
+      td(fmtParams(x.params), "r num"),
+      td(x.params ? "~" + fmtBytes(need(x.params)) : "—", "r num soft"),
+      td(x.score ? x.score.toFixed(1) : "—", "r num"),
+      td(x.latency_ms ? Math.round(x.latency_ms) + " ms" : "—", "r num soft"),
+      td(h("span", { class: "pill " + tone }, fit)),
+      td(h("div", { class: "actions" }, local.has(x.repo)
+        ? h("span", { class: "pill muted" }, "On disk")
+        : h("button", { type: "button", class: "btn sm", onclick: ev => { ev.stopPropagation(); openRepo(x.repo, x); } }, icon("download", 14), "Download"))));
+  })),
+    list.length > shown.length ? h("tfoot", {}, h("tr", {}, td(h("button", { type: "button", class: "btn sm", onclick: () => { hf.limit = 0; renderIndexTable(); } }, `Show all ${fmt(list.length)} models`), "empty", { colspan: cols }))) : null));
+}
+
+// openRepo lists a model's files so the user can pick what to download, with sizes against free disk space.
+function openRepo(repo, info) {
+  const sel = { files: null, error: "", picks: new Set(), busy: false };
+  const sheet = openSheet("Hugging Face model", info ? info.name : repo,
+    [h("a", { class: "link", href: "https://huggingface.co/" + repo, target: "_blank", rel: "noopener" }, repo), info && info.params ? h("span", { class: "pill muted" }, fmtParams(info.params) + " params") : null],
+    (body, foot, close, refresh) => {
+      const m = state.hf.machine;
+      if (sel.error) { put(body, h("p", { class: "formError" }, sel.error)); put(foot, h("button", { type: "button", class: "btn", onclick: close }, "Close")); return; }
+      if (!sel.files) { put(body, h("p", { class: "muted" }, spinner(14), " Loading files…")); put(foot); return; }
+      const files = sel.files.files, have = sel.files.downloaded || {};
+      const picked = files.filter(f => sel.picks.has(f.path));
+      const total = picked.reduce((n, f) => n + f.size, 0);
+      const todo = picked.filter(f => !have[f.path]).reduce((n, f) => n + f.size, 0);
+      const short = m && m.disk_total && todo > m.disk_free;
+      const repoSize = files.reduce((n, f) => n + f.size, 0);
+      const specs = [
+        ["Files", plural(files.length, "file")], ["Repository size", fmtBytes(repoSize)],
+        ["Selected", fmtBytes(total)], ["Still to download", fmtBytes(todo)],
+        ["Free disk", m && m.disk_total ? fmtBytes(m.disk_free) : "Unknown"],
+        ["Memory to run", info && info.params ? `~${fmtBytes(need(info.params))} at ${precisionOf()[1]} · ${fitOf(info.params)[0]}` : `~${fmtBytes(repoSize * 1.2)} (from file size)`],
+      ];
+      const allOn = files.every(f => sel.picks.has(f.path));
+      put(body, 
+        h("div", { class: "specGrid" }, specs.map(([k, v]) => h("div", { class: "specRow" }, h("span", { class: "specLabel" }, k), h("span", { class: "specValue" }, v)))),
+        short ? h("p", { class: "formError" }, `Not enough disk space: ${fmtBytes(todo)} still to download but only ${fmtBytes(m.disk_free)} free.`) : null,
+        h("p", { class: "hint" }, `Files are saved in ${sel.files.path}. Running the model needs a System One server, for example vLLM, pointed at this folder. Then add that server as a node.`),
+        h("div", { class: "tableWrap xscroll" }, h("table", { class: "table" },
+          h("thead", {}, h("tr", {},
+            h("th", {}, h("input", { type: "checkbox", checked: allOn, "aria-label": "Select all files", onchange: e => { files.forEach(f => e.target.checked ? sel.picks.add(f.path) : sel.picks.delete(f.path)); refresh(); } })),
+            h("th", {}, "File"), h("th", { class: "r" }, "Size"), h("th", {}, ""))),
+          h("tbody", {}, files.map(f => h("tr", {},
+            td(h("input", { type: "checkbox", checked: sel.picks.has(f.path), "aria-label": "Select " + f.path, onchange: e => { e.target.checked ? sel.picks.add(f.path) : sel.picks.delete(f.path); refresh(); } })),
+            td(h("span", { class: "mono" }, f.path)), td(fmtBytes(f.size), "r num soft"),
+            td(have[f.path] ? h("span", { class: "pill muted" }, "On disk") : null)))))));
+      put(foot, 
+        h("button", { type: "button", class: "btn", onclick: close }, "Cancel"),
+        h("button", { type: "button", class: "btn primary", disabled: sel.busy || !picked.length || !todo || short, onclick: async () => {
+          sel.busy = true; refresh();
+          try {
+            await call("POST", API + "/hf/download", { repo, files: picked.length === files.length ? [] : picked.map(f => f.path) });
+            toast("Download started", true); close(); setTab("hf"); loadHF(false);
+          } catch (e) { toast(e.message); sel.busy = false; refresh(); }
+        } }, sel.busy ? spinner(14) : icon("download", 14), !picked.length ? "Select files" : !todo ? "Already downloaded" : "Download " + fmtBytes(todo)));
+    });
+  call("POST", API + "/hf/files", { repo })
+    .then(d => { sel.files = d; d.files.forEach(f => sel.picks.add(f.path)); })
+    .catch(e => { sel.error = e.message; })
+    .finally(() => { if (sheet.isOpen()) sheet.refresh(); });
+}
+
 start();
 </script>
 </body>

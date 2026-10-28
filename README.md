@@ -1,4 +1,4 @@
-# System One plugin for CLIProxyAPI
+# Open Systemone: System One plugin for CLIProxyAPI
 
 Adds [System One](https://opencode.ai) decision nodes to [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI).
 A decision request (`{model, state, questions}`) goes to the node chosen by the model prefix and
@@ -7,14 +7,18 @@ local model server (e.g. Winnow 12B) or a hosted lane (OpenCode, OpenRouter, v1m
 
 - Add nodes by URL, with several API keys (round-robin with fallback), extra headers and a per-node proxy.
 - Configured models show up in `GET /v1/models` as `prefix/model`.
-- A **System One** page in the management panel: node list, Check (with latency), Fetch models
-  from the node, and an example builder that sends test decisions.
+- An **Open Systemone** page in the management panel, built from the panel's own design: node list,
+  Check (with latency), Fetch models from the node, and an example builder that sends test decisions.
+- A **Hugging Face** tab that lists the decision models of the
+  [Jev Decision Index](https://huggingface.co/spaces/multimodalart/jev-decision-index), shows the
+  machine's CPU, memory, GPU and free disk next to each model's estimated size, and downloads models
+  into `models-dir` (with an optional Hugging Face token for gated or private models).
 
 Requires CLIProxyAPI v8 with plugins enabled. Streaming is not supported (decisions are a single JSON response).
 
 ## Install
 
-**Plugin store:** open *Plugins → Store* in the management panel and install **System One**.
+**Plugin store:** open *Plugins → Store* in the management panel and install **Open Systemone**.
 
 **Manually:** download `systemone_<version>_<os>_<arch>.zip` from
 [Releases](https://github.com/ducdao98z/cpa-plugin-systemone/releases), extract
@@ -35,7 +39,7 @@ docker run --rm -v "$PWD":/src -w /src golang:1.26-bookworm \
 
 ## Configure
 
-Enable the plugin under its base settings, then add nodes on the **System One** page
+Enable the plugin under its base settings, then add nodes on the **Open Systemone** page
 (PLUGINS in the sidebar) or in `config.yaml`:
 
 ```yaml
@@ -46,6 +50,8 @@ plugins:
     systemone:
       enabled: true
       priority: 10
+      huggingface-token: ""                           # optional, for gated or private models
+      models-dir: "plugins/data/models"               # where Hugging Face downloads are saved
       nodes:
         - name: "Winnow Local"                        # display name (defaults to prefix)
           prefix: "winnow"                            # model prefix: winnow/Winnow-12B
@@ -76,9 +82,8 @@ network errors. Other errors (e.g. 422) return at once with the upstream status 
 
 ## Use
 
-Send the decision payload to `POST /v1/chat/completions` with a normal CLIProxyAPI API key. The
-plugin claims any request whose model matches a node. Hosts that expose `POST /v1/systemone`
-accept the same request there.
+Send the decision payload to `POST /v1/chat/completions` (or `/v1/systemone` on hosts that expose it) with a normal CLIProxyAPI API key. The
+plugin claims any request whose model matches a node.
 
 ```bash
 curl http://127.0.0.1:8317/v1/chat/completions \
@@ -93,7 +98,7 @@ curl http://127.0.0.1:8317/v1/chat/completions \
 Question types: `noul` (yes/no probability), `choice` (`criteria` is a label→description object),
 `score` (`criteria` is an ordered list of levels).
 
-## System One page
+## Open Systemone page
 
 Opened from the management panel it reuses the panel's login; opened on its own
 (`/v0/resource/plugins/systemone/ui`) it asks for the management key and keeps it in this
@@ -113,6 +118,20 @@ when a key is set).
 Saving writes `plugins.configs.systemone.nodes` through `/v8/management/config`; the plugin reloads
 automatically.
 
+### Hugging Face tab
+
+- Machine: CPU, memory (the cgroup limit inside a container), NVIDIA GPUs (via `nvidia-smi`) and free
+  disk space in `models-dir`. This is the computer CLIProxyAPI runs on, where models are downloaded.
+- Token: saved as `huggingface-token`; the page shows which account it belongs to.
+- Jev Decision Index: models that publish weights, with rank, parameters, a rough memory estimate
+  at the chosen precision (BF16, Q8 or Q4, plus 20%), score, latency and whether they fit the GPU, fit only in RAM or are
+  too large. Filters show only the models that fit.
+- Download: pick files, compare their size with free disk space (a download that does not fit is
+  refused), follow the progress, stop and resume (partial files are kept as `.part`), delete.
+
+Downloading only stores the files. To use a model, run it with a System One server (for example
+vLLM) and add that server as a node.
+
 ### Management API
 
 All routes need the management key.
@@ -124,6 +143,13 @@ All routes need the management key.
 | `POST /v0/management/systemone/check` | `{node, model}`: `/health`, then a probe decision when keyed |
 | `POST /v0/management/systemone/models` | `{node}`: upstream model list |
 | `POST /v0/management/systemone/test` | `{node, model, payload}`: send a decision through the node |
+| `GET /v0/management/systemone/hf/status` | Token account, downloads of this session, models in `models-dir` |
+| `GET /v0/management/systemone/hf/machine` | CPU, memory, GPUs, free disk |
+| `GET /v0/management/systemone/hf/index` | Jev Decision Index models with weights (`?refresh=1` reloads) |
+| `POST /v0/management/systemone/hf/files` | `{repo}`: files and sizes |
+| `POST /v0/management/systemone/hf/download` | `{repo, files?}`: start or resume a download |
+| `POST /v0/management/systemone/hf/cancel` | `{repo}`: stop a download, keeping partial files |
+| `POST /v0/management/systemone/hf/delete` | `{repo}`: delete a downloaded model |
 
 `node` is either `{"prefix": "<saved prefix>"}` or a full unsaved node (with `url` or `preset`).
 

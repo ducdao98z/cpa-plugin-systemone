@@ -61,7 +61,8 @@ func TestResolveNode(t *testing.T) {
 nodes:
   - {prefix: winnow, url: "http://w/v1/systemone", models: [Winnow-12B]}
   - {prefix: any, url: "http://x/v1/systemone"}
-  - {prefix: off, url: "http://x/v1/systemone", disabled: true}
+  - {prefix: off, url: "http://x/v1/systemone", disabled: true, models: [{id: m, alias: dead}]}
+  - {prefix: el, url: "http://e/v1/systemone", models: [{id: elephant-1, alias: jev-1.14.0}]}
 `)
 	cases := []struct {
 		in    string
@@ -74,6 +75,9 @@ nodes:
 		{"off/m", false, ""},
 		{"gpt-5", false, ""},
 		{"winnow/", false, ""},
+		{"JEV-1.14.0", true, "elephant-1"},
+		{"el/elephant-1", true, "elephant-1"},
+		{"dead", false, ""},
 	}
 	for _, c := range cases {
 		_, got, ok := resolveNode(cfg, c.in)
@@ -183,5 +187,39 @@ func TestManagementTestUsesUnsavedNode(t *testing.T) {
 	}
 	if _, ok := (nodeRequest{Node: node{Prefix: "missing"}}).resolve(pluginConfig{}); ok {
 		t.Fatal("unknown saved prefix should not resolve")
+	}
+}
+
+func TestRunDecisionAlias(t *testing.T) {
+	cfg := loadTestConfig(t, `
+nodes:
+  - {prefix: el, url: "http://e/v1/systemone", models: [{id: elephant-1, alias: jev-1.14.0}]}
+`)
+	var sent []byte
+	hostDo = func(_, _, _ string, _ http.Header, body []byte) (httpResult, error) {
+		sent = body
+		return httpResult{Status: 200, Body: []byte(`{"model":"elephant-1","answers":{}}`)}, nil
+	}
+	run := func(model string) map[string]any {
+		out, errRun := runDecision(cfg, []byte(`{"model":"`+model+`","state":"s","questions":{"q":{"type":"noul","instructions":"?"}}}`), "", "")
+		if errRun != nil {
+			t.Fatalf("%s: %v", model, errRun)
+		}
+		var got map[string]any
+		_ = json.Unmarshal(out, &got)
+		return got
+	}
+	if got := run("jev-1.14.0"); got["model"] != "jev-1.14.0" || !strings.Contains(string(sent), `"model":"elephant-1"`) {
+		t.Fatalf("alias: resp=%v sent=%s", got, sent)
+	}
+	if got := run("el/elephant-1"); got["model"] != "elephant-1" {
+		t.Fatalf("prefixed model should pass the upstream response through: %v", got)
+	}
+	ids := map[string]bool{}
+	for _, m := range staticModels(cfg) {
+		ids[m.ID] = true
+	}
+	if !ids["jev-1.14.0"] || !ids["el/elephant-1"] {
+		t.Fatalf("staticModels = %v", ids)
 	}
 }

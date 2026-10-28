@@ -71,11 +71,12 @@ import (
 
 const (
 	pluginIdentifier = "systemone"
+	displayName      = "Open Systemone"
 	repositoryURL    = "https://github.com/ducdao98z/cpa-plugin-systemone"
 )
 
 // pluginVersion is set from the release tag with -ldflags "-X main.pluginVersion=...".
-var pluginVersion = "0.4.0"
+var pluginVersion = "0.5.2"
 
 var currentConfig atomic.Value
 
@@ -179,7 +180,7 @@ func cliproxyPluginFree(ptr unsafe.Pointer, _ C.size_t) {
 }
 
 //export cliproxyPluginShutdown
-func cliproxyPluginShutdown() {}
+func cliproxyPluginShutdown() { cancelAllDownloads() }
 
 func handleMethod(method string, request []byte) ([]byte, error) {
 	switch method {
@@ -246,13 +247,15 @@ func pluginRegistration() registration {
 	return registration{
 		SchemaVersion: pluginabi.SchemaVersion,
 		Metadata: pluginapi.Metadata{
-			Name:             pluginIdentifier,
+			Name:             displayName,
 			Version:          pluginVersion,
 			Author:           "ducdao98z",
 			GitHubRepository: repositoryURL,
 			ConfigFields: []pluginapi.ConfigField{
-				{Name: "nodes", Type: pluginapi.ConfigFieldTypeArray, Description: "System One nodes. Manage them on the System One page of this plugin (add node with URL, Check, Fetch models, models, example). " +
-					"Item fields: name, prefix, url, api-keys, headers, proxy-url, models [{id, name}], disabled, preset (" + strings.Join(presetNames, ", ") + ")."},
+				{Name: "nodes", Type: pluginapi.ConfigFieldTypeArray, Description: "The System One decision servers this plugin routes to. Manage them on the plugin's Open Systemone page, which adds a node by URL, checks it, fetches its models and sends a test decision. " +
+					"Each item has name, prefix, url, api-keys, headers, proxy-url, models [{id, name}], disabled and preset (one of " + strings.Join(presetNames, ", ") + ")."},
+				{Name: "huggingface-token", Type: pluginapi.ConfigFieldTypeString, Description: "A Hugging Face access token. It is only needed to download gated or private models from the Hugging Face tab of the Open Systemone page."},
+				{Name: "models-dir", Type: pluginapi.ConfigFieldTypeString, Description: "The folder where models downloaded from Hugging Face are saved, plugins/data/models when empty. A relative path starts at the CLIProxyAPI working directory."},
 			},
 		},
 		Capabilities: registrationCapability{
