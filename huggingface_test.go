@@ -103,3 +103,23 @@ func TestDownloadResumes(t *testing.T) {
 		t.Fatalf("model folder still there: %v", err)
 	}
 }
+
+func TestListDirs(t *testing.T) {
+	root := t.TempDir()
+	for _, d := range []string{"b", "a", ".hidden"} {
+		if errMkdir := os.Mkdir(filepath.Join(root, d), 0o755); errMkdir != nil {
+			t.Fatal(errMkdir)
+		}
+	}
+	got := listDirs(pluginConfig{ModelsDir: root}, "")
+	if got.Path != root || !got.Exists || !got.Writable || got.Parent != filepath.Dir(root) {
+		t.Fatalf("unexpected listing %+v", got)
+	}
+	if strings.Join(got.Dirs, ",") != "a,b" {
+		t.Fatalf("dirs = %v, want a,b", got.Dirs)
+	}
+	missing := listDirs(pluginConfig{}, filepath.Join(root, "new"))
+	if missing.Exists || missing.Error != "" || len(missing.Dirs) != 0 {
+		t.Fatalf("missing folder listing %+v", missing)
+	}
+}

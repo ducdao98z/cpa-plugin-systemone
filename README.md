@@ -126,11 +126,36 @@ automatically.
 - Jev Decision Index: models that publish weights, with rank, parameters, a rough memory estimate
   at the chosen precision (BF16, Q8 or Q4, plus 20%), score, latency and whether they fit the GPU, fit only in RAM or are
   too large. Filters show only the models that fit.
+- Model folder: choose where downloads go (`models-dir`) by browsing the folders of the CLIProxyAPI
+  machine. Inside a container the page lists the folders mounted from the host, since only those
+  survive the container and can be handed to a model server.
 - Download: pick files, compare their size with free disk space (a download that does not fit is
-  refused), follow the progress, stop and resume (partial files are kept as `.part`), delete.
+  refused), follow the progress, stop and resume (partial files are kept as `.part`), delete. A
+  repository without GGUF files lists its GGUF builds on Hugging Face; in a GGUF repository the file
+  matching the Precision switch (and its vision projector) is selected.
+- Run: starts a downloaded GGUF model in a llama.cpp server container
+  (`ghcr.io/ggml-org/llama.cpp:server-cuda`, or `:server` without an NVIDIA GPU) and adds it as a node,
+  so clients ask for `<name>/<name>`. When the file has no System One decision metadata, the plugin
+  writes a copy (`*.systemone.gguf`) with the `systemone` chat template and the `openjev` readout,
+  and sets non-causal attention when the original model's `config.json` declares it
+  (`modeling_overrides.attention.full_attention: block_bidirectional`, as elephant-1 does). Models
+  with a learned readout head are refused because llama.cpp cannot run them.
+- Model servers: progress while a model is set up, then its state, logs, stop/start and remove
+  (which also removes its node).
 
-Downloading only stores the files. To use a model, run it with a System One server (for example
-vLLM) and add that server as a node.
+Running models needs the Docker socket inside CLIProxyAPI's container, for example in
+`docker-compose.override.yml`:
+
+```yaml
+services:
+  cli-proxy-api:
+    gpus: all # lets the page see the GPU
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+```
+
+The socket gives CLIProxyAPI full control of Docker on the host, so keep the management key safe.
+Model containers join CLIProxyAPI's Docker network and are reached by name, without a host port.
 
 ### Management API
 
@@ -150,6 +175,13 @@ All routes need the management key.
 | `POST /v0/management/systemone/hf/download` | `{repo, files?}`: start or resume a download |
 | `POST /v0/management/systemone/hf/cancel` | `{repo}`: stop a download, keeping partial files |
 | `POST /v0/management/systemone/hf/delete` | `{repo}`: delete a downloaded model |
+| `GET /v0/management/systemone/hf/dirs` | `?path=`: subfolders, whether it is writable, host mounts |
+| `POST /v0/management/systemone/hf/gguf` | `{repo}`: GGUF builds of a model on Hugging Face |
+| `GET /v0/management/systemone/run/status` | Docker access, model servers and setup progress |
+| `POST /v0/management/systemone/run/files` | `{repo}`: downloaded GGUF files and whether they have decision metadata |
+| `POST /v0/management/systemone/run/start` | `{repo, file, mmproj?, name, context?, port?}`: install and start a model |
+| `POST /v0/management/systemone/run/action` | `{name, action}`: `stop`, `start`, `restart` or `remove` |
+| `POST /v0/management/systemone/run/logs` | `{name}`: last lines of a model server |
 
 `node` is either `{"prefix": "<saved prefix>"}` or a full unsaved node (with `url` or `preset`).
 

@@ -663,3 +663,83 @@ func humanBytes(n uint64) string {
 	}
 	return fmt.Sprintf("%.1f %ciB", float64(n)/float64(div), "KMGTPE"[exp])
 }
+
+// ---------- folder picker ----------
+
+type dirListing struct {
+	Path     string   `json:"path"`
+	Parent   string   `json:"parent,omitempty"`
+	Exists   bool     `json:"exists"`
+	Writable bool     `json:"writable"`
+	Free     uint64   `json:"free"`
+	Dirs     []string `json:"dirs"`
+	Mounts   []string `json:"mounts"`
+	Error    string   `json:"error,omitempty"`
+}
+
+// listDirs lets the page browse folders of the machine CLIProxyAPI runs on to choose models-dir.
+// A folder that does not exist yet is fine: downloads create it.
+func listDirs(cfg pluginConfig, path string) dirListing {
+	if path = strings.TrimSpace(path); path == "" {
+		path = cfg.ModelsDir
+	}
+	out := dirListing{Path: path, Dirs: []string{}, Mounts: containerMounts()}
+	if abs, errAbs := filepath.Abs(path); errAbs == nil {
+		out.Path = abs
+	}
+	if parent := filepath.Dir(out.Path); parent != out.Path {
+		out.Parent = parent
+	}
+	entries, errRead := os.ReadDir(out.Path)
+	if errRead != nil {
+		if !errors.Is(errRead, fs.ErrNotExist) {
+			out.Error = errRead.Error()
+		}
+		return out
+	}
+	out.Exists = true
+	for _, e := range entries {
+		if e.IsDir() && !strings.HasPrefix(e.Name(), ".") {
+			out.Dirs = append(out.Dirs, e.Name())
+		}
+	}
+	if probe, errProbe := os.CreateTemp(out.Path, ".systemone-write-*"); errProbe == nil {
+		out.Writable = true
+		_ = probe.Close()
+		_ = os.Remove(probe.Name())
+	}
+	out.Free, _ = diskSpace(out.Path)
+	return out
+}
+
+// containerMounts lists the folders bind-mounted into the container CLIProxyAPI runs in, which are
+// the only ones kept on the host's disk. Outside a container it returns nothing.
+func containerMounts() []string {
+	mounts := []string{}
+	if _, errStat := os.Stat("/.dockerenv"); errStat != nil {
+		return mounts
+	}
+	raw, errRead := os.ReadFile("/proc/self/mountinfo")
+	if errRead != nil {
+		return mounts
+	}
+	for _, line := range strings.Split(string(raw), "\n") {
+		left, right, ok := strings.Cut(line, " - ")
+		fields, tail := strings.Fields(left), strings.Fields(right)
+		if !ok || len(fields) < 5 || len(tail) < 1 {
+			continue
+		}
+		point := fields[4]
+		switch tail[0] {
+		case "proc", "sysfs", "tmpfs", "devpts", "mqueue", "cgroup", "cgroup2", "overlay", "shm":
+			continue
+		}
+		if point == "/" || strings.HasPrefix(point, "/proc") || strings.HasPrefix(point, "/sys") || strings.HasPrefix(point, "/dev") || strings.HasPrefix(point, "/etc/") {
+			continue
+		}
+		if st, errDir := os.Stat(point); errDir == nil && st.IsDir() {
+			mounts = append(mounts, point)
+		}
+	}
+	return mounts
+}

@@ -293,7 +293,8 @@ const ICONS = {
 };
 
 const state = { key: "", keySource: "", tab: storageGet(TAB_STORE) === "hf" ? "hf" : "nodes", loaded: false, error: "",
-  config: { nodes: [], token: "" }, presets: [], checks: {},
+  config: { nodes: [], token: "", dir: "" }, presets: [], checks: {},
+  run: null,
   hf: { status: null, machine: null, index: null, indexError: "", q: "", fit: "all", limit: 40,
     precision: PRECISIONS.some(p => p[0] === storageGet(PRECISION_STORE)) ? storageGet(PRECISION_STORE) : "bf16" } };
 const ui = {};
@@ -534,7 +535,7 @@ async function load() {
   try {
     const [cfg, presets] = await Promise.all([call("GET", CONFIG_PATH), call("GET", API + "/presets").catch(() => ({ presets: [] }))]);
     const c = cfg || {};
-    state.config = { nodes: Array.isArray(c.nodes) ? c.nodes : [], token: typeof c["huggingface-token"] === "string" ? c["huggingface-token"] : "" };
+    state.config = { nodes: Array.isArray(c.nodes) ? c.nodes : [], token: typeof c["huggingface-token"] === "string" ? c["huggingface-token"] : "", dir: typeof c["models-dir"] === "string" ? c["models-dir"].trim() : "" };
     state.presets = (presets && presets.presets) || [];
     state.error = "";
   } catch (e) {
@@ -1011,7 +1012,8 @@ function nodeExample(ed, refresh, run) {
 // ================= Hugging Face =================
 async function loadHF(withIndex) {
   const hf = state.hf;
-  const jobs = [call("GET", API + "/hf/status").then(d => { hf.status = d; }), call("GET", API + "/hf/machine").then(d => { hf.machine = d; })];
+  const jobs = [call("GET", API + "/hf/status").then(d => { hf.status = d; }), call("GET", API + "/hf/machine").then(d => { hf.machine = d; }),
+    call("GET", API + "/run/status").then(d => { state.run = d; })];
   if (withIndex !== false && (!hf.index || withIndex === "refresh"))
     jobs.push(call("GET", API + "/hf/index" + (withIndex === "refresh" ? "?refresh=1" : "")).then(d => { hf.index = d; hf.indexError = ""; }, e => { hf.indexError = e.message; }));
   await Promise.all(jobs.map(p => p.catch(e => { if (e.message !== "unauthorized") toast(e.message); })));
@@ -1021,7 +1023,7 @@ async function loadHF(withIndex) {
 // While a download runs, progress and free disk space are refreshed every two seconds.
 function pollHF() {
   clearTimeout(pollHF.timer);
-  const running = state.hf.status && state.hf.status.downloads.some(d => d.status === "running");
+  const running = (state.hf.status && state.hf.status.downloads.some(d => d.status === "running")) || runJobsActive();
   if (running) pollHF.timer = setTimeout(() => { if (ui.content) loadHF(false); }, 2000);
 }
 
@@ -1049,7 +1051,7 @@ function renderHF() {
       tile("GPU", m.gpus.length ? fmtBytes(gpuMem) : "None", m.gpus.length ? m.gpus.map(g => g.name).join(", ") : "No NVIDIA GPU found, so models run on the CPU", m.gpus.length ? "var(--viz-success)" : "var(--amber-color)"),
       tile("Disk free", m.disk_total ? fmtBytes(m.disk_free) : "—", m.disk_total ? `of ${fmtBytes(m.disk_total)} in ${m.disk_path}` : m.disk_path, m.disk_free && m.disk_free < 20 * 2 ** 30 ? "var(--viz-failure)" : "var(--viz-requests)", m.disk_total ? 100 * (1 - m.disk_free / m.disk_total) : undefined)));
   }
-  out.push(tokenSection());
+  out.push(tokenSection(), folderSection(), serversSection());
   const rows = downloadRows();
   if (rows.length) out.push(downloadsSection(rows));
   out.push(indexSection());
@@ -1090,6 +1092,63 @@ function tokenSection() {
         }) }, "Remove") : null)));
 }
 
+function folderSection() {
+  const st = state.hf.status, m = state.hf.machine;
+  return section("models-dir", "Model folder",
+    "Where downloaded models are saved on the machine CLIProxyAPI runs on. Models already downloaded stay in the old folder when you change it.",
+    h("div", { class: "panel" }, h("div", { class: "row wrap" },
+      h("span", { class: "mono ellipsis", title: st ? st.models_dir : "" }, m ? m.disk_path : st ? st.models_dir : "…"),
+      state.config.dir ? null : h("span", { class: "pill muted" }, "Default"),
+      m && m.disk_total ? h("span", { class: "hint" }, fmtBytes(m.disk_free) + " free") : null,
+      h("button", { type: "button", class: "btn", onclick: () => pickFolder(m ? m.disk_path : "") }, "Change"),
+      state.config.dir ? h("button", { type: "button", class: "btn ghost", onclick: () => saveFolder("") }, "Use default") : null)));
+}
+async function saveFolder(dir) {
+  if (dir) await call("PUT", CONFIG_PATH + "/models-dir", dir);
+  else await call("DELETE", CONFIG_PATH + "/models-dir");
+  state.config.dir = dir;
+  toast(dir ? "Model folder saved" : "Using the default folder", true);
+  setTimeout(() => loadHF(false), 1500); // the plugin picks the config up a moment later
+}
+// pickFolder browses folders on the CLIProxyAPI machine. A path that does not exist yet is allowed; downloads create it.
+function pickFolder(start) {
+  const input = h("input", { class: "input mono", value: start, "aria-label": "Folder path", spellcheck: "false" });
+  const list = h("div", {});
+  let cur = null;
+  const go = async path => {
+    put(list, h("p", { class: "muted" }, spinner(14), " Loading…"));
+    try { cur = await call("GET", API + "/hf/dirs?path=" + encodeURIComponent(path)); } catch (e) { put(list, h("p", { class: "formError" }, e.message)); return; }
+    input.value = cur.path;
+    const join = name => cur.path.replace(/[\\/]+$/, "") + (cur.path.includes("\\") ? "\\" : "/") + name;
+    const status = cur.error ? h("span", { class: "pill bad", title: cur.error }, "Cannot open")
+      : !cur.exists ? h("span", { class: "pill muted" }, "New folder, created on first download")
+      : cur.writable ? h("span", { class: "pill" }, "Writable · " + fmtBytes(cur.free) + " free")
+      : h("span", { class: "pill bad" }, "Read-only");
+    put(list,
+      h("div", { class: "row wrap" }, status,
+        cur.parent ? h("button", { type: "button", class: "btn sm", onclick: () => go(cur.parent) }, "Up one level") : null),
+      cur.mounts.length ? h("p", { class: "hint" }, "CLIProxyAPI runs in a container, so only folders mounted from the host are kept on the host's disk: ",
+        cur.mounts.map((p, i) => [i ? ", " : "", h("a", { class: "link", href: "#", onclick: e => { e.preventDefault(); go(p); } }, p)]), ".") : null,
+      cur.dirs.length ? h("div", { class: "tableWrap", style: "max-height:320px;overflow:auto" }, h("table", { class: "table" }, h("tbody", {},
+        cur.dirs.map(d => h("tr", { class: "click", onclick: () => go(join(d)) }, td(h("span", { class: "mono" }, d + "/"))))))) 
+        : cur.exists ? h("p", { class: "hint" }, "No subfolders.") : null);
+  };
+  input.addEventListener("keydown", e => { if (e.key === "Enter") go(input.value); });
+  openModal("Choose the model folder", [
+    h("div", { class: "row" }, input, h("button", { type: "button", class: "btn", onclick: () => go(input.value) }, "Open")),
+    list], close => {
+    const ok = h("button", { type: "button", class: "btn primary", onclick: async () => {
+      const path = input.value.trim();
+      if (!path) return toast("Enter a folder");
+      if (cur && cur.path === path && cur.exists && !cur.writable) return toast("This folder is read-only");
+      ok.disabled = true;
+      try { await saveFolder(path); close(); } catch (e) { toast(e.message); ok.disabled = false; }
+    } }, "Use this folder");
+    return [h("button", { type: "button", class: "btn", onclick: close }, "Cancel"), ok];
+  });
+  go(start);
+}
+
 // downloadRows merges this session's downloads with the model folders already on disk.
 function downloadRows() {
   const st = state.hf.status;
@@ -1101,7 +1160,7 @@ function downloadRows() {
 }
 function downloadsSection(rows) {
   const head = h("thead", {}, h("tr", {}, ["Model", "Progress", "Status", ""].map(t => h("th", {}, t))));
-  return section("models-dir", "Downloaded models", `Models are saved in ${state.hf.status.models_dir}. A stopped download keeps its partial files and continues where it left off when you download again.`,
+  return section("downloads", "Downloaded models", `Models are saved in ${state.hf.status.models_dir}. A stopped download keeps its partial files and continues where it left off when you download again.`,
     h("div", { class: "tableWrap xscroll" }, h("table", { class: "table" }, head, h("tbody", {}, rows.map(r => {
       const j = r.job, l = r.local;
       let status, progress;
@@ -1125,6 +1184,7 @@ function downloadsSection(rows) {
         td(h("div", { class: "actions" },
           running ? h("button", { type: "button", class: "btn sm", onclick: async () => { await call("POST", API + "/hf/cancel", { repo: r.repo }).catch(e => toast(e.message)); loadHF(false); } }, "Stop")
             : h("button", { type: "button", class: "btn sm", onclick: () => openRepo(r.repo) }, l && !l.partial && !(j && j.status !== "done") ? "Files" : "Resume"),
+          running ? null : h("button", { type: "button", class: "btn sm primary", onclick: () => openRun(r.repo) }, "Run"),
           running ? null : h("button", { type: "button", class: "iconBtn", title: "Delete", "aria-label": "Delete model", onclick: () => confirmDialog("Delete model", [`Delete ${r.repo} and all its files from ${r.path}?`], "Delete", async () => {
             await call("POST", API + "/hf/delete", { repo: r.repo }); toast("Model deleted", true); loadHF(false);
           }) }, icon("trash", 16)))));
@@ -1143,7 +1203,7 @@ function indexSection() {
   const idx = hf.index;
   return section("Jev Decision Index", "Decision models on Hugging Face",
     h("span", {}, "Models from the ", h("a", { class: "link", href: (idx && idx.source) || "https://huggingface.co/spaces/multimodalart/jev-decision-index", target: "_blank", rel: "noopener" }, "Jev Decision Index"),
-      " that publish their weights, best score first. Score is the index's balanced skill score and latency is its median per decision. Memory is a rough estimate for the precision you pick (BF16 is the unquantized model, Q8 and Q4 are quantized builds), compared with the machine above. Downloads are the repository's own files, usually BF16, so a quantized run needs a converted or quantized build.",
+      " that publish their weights, best score first. Score is the index's balanced skill score and latency is its median per decision. Memory is a rough estimate for the precision you pick (BF16 is the unquantized model, Q8 and Q4 are quantized builds), compared with the machine above. Most repositories hold the original BF16 weights; open a model to find its GGUF builds, which this page can download and run with llama.cpp.",
       idx && idx.generated ? ` Index updated ${dateTimeFmt.format(new Date(idx.generated))}.` : ""),
     h("div", { class: "row wrap" }, search, h("div", { class: "row" }, h("span", { class: "hint" }, "Precision"), precision), filters,
       h("button", { type: "button", class: "btn", "aria-label": "Reload index", title: "Reload index", onclick: () => { hf.index = null; render(); loadHF("refresh"); } }, icon("refresh", 16))),
@@ -1184,6 +1244,133 @@ function renderIndexTable() {
     list.length > shown.length ? h("tfoot", {}, h("tr", {}, td(h("button", { type: "button", class: "btn sm", onclick: () => { hf.limit = 0; renderIndexTable(); } }, `Show all ${fmt(list.length)} models`), "empty", { colspan: cols }))) : null));
 }
 
+// ================= model servers =================
+const isGGUF = p => /\.gguf$/i.test(p);
+const isMMProj = p => /mmproj/i.test(p);
+const QUANT = { bf16: /(^|[^a-z])(b?f|fp)16/i, q8: /q8_0/i, q4: /q4_k_m/i };
+// pickQuant chooses the GGUF file for the Precision switch, plus a matching vision projector when the repo has one.
+function pickQuant(paths) {
+  const want = QUANT[state.hf.precision] || QUANT.q8;
+  const models = paths.filter(p => isGGUF(p) && !isMMProj(p)), projs = paths.filter(p => isGGUF(p) && isMMProj(p));
+  const model = models.find(p => want.test(p)) || models.find(p => QUANT.q8.test(p)) || models[0];
+  const proj = projs.find(p => want.test(p)) || projs.find(p => QUANT.q8.test(p)) || projs[0];
+  return [model, proj].filter(Boolean);
+}
+const JOB_STEPS = { preparing: "Adding decision metadata", pulling: "Downloading the llama.cpp image", starting: "Starting the container", loading: "Loading the model" };
+function runJobsActive() { return !!(state.run && state.run.jobs.some(j => JOB_STEPS[j.step])); }
+function serversSection() {
+  const r = state.run;
+  const desc = "Downloaded GGUF models run in llama.cpp containers that this page starts through Docker. Each one is added as a node, so clients reach it as <name>/<name>.";
+  if (!r) return section("llama.cpp", "Model servers", desc, h("p", { class: "muted" }, spinner(14), " Loading…"));
+  const jobs = new Map(r.jobs.map(j => [j.name, j]));
+  const rows = r.runners.map(x => ({ name: x.name, runner: x, job: jobs.get(x.name) }));
+  for (const j of r.jobs) if (!r.runners.some(x => x.name === j.name)) rows.push({ name: j.name, job: j });
+  const head = h("thead", {}, h("tr", {}, ["Model", "URL", "Status", ""].map(t => h("th", {}, t))));
+  const act = async (name, action) => {
+    try { await call("POST", API + "/run/action", { name, action }); } catch (e) { toast(e.message); }
+    loadHF(false);
+  };
+  return section("llama.cpp", "Model servers", desc,
+    r.docker_error ? h("p", { class: "formError" }, "Docker is not available to the plugin: " + r.docker_error + ". CLIProxyAPI needs access to the Docker socket (/var/run/docker.sock) to start model servers.") : null,
+    h("div", { class: "tableWrap xscroll" }, h("table", { class: "table" }, head, h("tbody", {}, !rows.length
+      ? h("tr", {}, td("No model servers yet. Download a GGUF model, then click Run.", "empty", { colspan: 4 }))
+      : rows.map(({ name, runner, job }) => {
+        let status;
+        if (job && JOB_STEPS[job.step]) {
+          const pct = job.total ? ` ${(100 * job.done / job.total).toFixed(0)}%` : "";
+          status = h("span", { class: "pill warn" }, spinner(10), " " + JOB_STEPS[job.step] + pct);
+        } else if (job && job.step === "failed") status = h("span", { class: "pill bad", title: job.error }, "Failed");
+        else if (runner) status = h("span", { class: runner.state === "running" ? "pill" : "pill muted", title: runner.status }, runner.state === "running" ? "Running" : runner.status || runner.state);
+        const url = (runner && runner.url) || (job && job.url) || "";
+        const busy = job && JOB_STEPS[job.step];
+        return h("tr", {},
+          td(h("div", { class: "keyCell" }, h("b", {}, name), h("span", { class: "keyLine" }, h("span", { class: "ellipsis" }, ((runner && runner.repo) || job.repo) + (runner && runner.file ? " · " + runner.file : ""))),
+            job && job.step === "failed" ? h("span", { class: "sub bad" }, job.error) : null)),
+          td(h("span", { class: "mono ellipsis", title: url }, url)),
+          td(status),
+          td(h("div", { class: "actions" },
+            runner ? h("button", { type: "button", class: "btn sm", onclick: () => showLogs(name) }, "Logs") : null,
+            runner && !busy ? h("button", { type: "button", class: "btn sm", onclick: () => act(name, runner.state === "running" ? "stop" : "start") }, runner.state === "running" ? "Stop" : "Start") : null,
+            busy ? null : h("button", { type: "button", class: "iconBtn", title: "Remove", "aria-label": "Remove model server", onclick: () => removeServer(name, url, !!runner) }, icon("trash", 16)))));
+      })))));
+}
+function removeServer(name, url, hasContainer) {
+  const node = state.config.nodes.find(n => n.url === url);
+  confirmDialog("Remove model server", [`Remove the ${name} container?${node ? ` Its node ${node.prefix} is removed too.` : ""} The downloaded files stay.`], "Remove", async () => {
+    await call("POST", API + "/run/action", { name, action: "remove" }).catch(e => { if (hasContainer) throw e; });
+    if (node) await saveNodes(state.config.nodes.filter(n => n !== node));
+    toast("Model server removed", true); render(); loadHF(false);
+  });
+}
+async function showLogs(name) {
+  const pre = h("pre", { class: "code", style: "max-height:60vh;overflow:auto;white-space:pre-wrap" }, "Loading…");
+  openModal(name + " logs", pre, close => [h("button", { type: "button", class: "btn", onclick: close }, "Close")]);
+  try { pre.textContent = (await call("POST", API + "/run/logs", { name })).logs || "(no output)"; pre.scrollTop = pre.scrollHeight; }
+  catch (e) { pre.textContent = e.message; }
+}
+// addRunnerNode saves the model server as a node, or points the node with the same prefix at it.
+async function addRunnerNode(name, url) {
+  const nodes = state.config.nodes.slice();
+  const i = nodes.findIndex(n => (n.prefix || n.preset || "").toLowerCase() === name.toLowerCase());
+  const node = i >= 0 ? { ...nodes[i], url } : { name: name + " (llama.cpp)", prefix: name, url, models: [{ id: name, name }] };
+  if (i >= 0) nodes[i] = node; else nodes.push(node);
+  await saveNodes(nodes);
+}
+// openRun installs a downloaded GGUF model and starts it: decision metadata, llama.cpp container, node.
+function openRun(repo) {
+  const sel = { files: null, error: "", busy: false };
+  const form = { file: "", mmproj: "", name: repo.split("/")[1].replace(/[-_.](decision[-_.])?gguf$/i, "").toLowerCase().replace(/[^a-z0-9_.-]/g, "-"), context: "32768", port: "" };
+  const sheet = openSheet("Run with llama.cpp", repo, h("a", { class: "link", href: "https://huggingface.co/" + repo, target: "_blank", rel: "noopener" }, repo),
+    (body, foot, close, refresh) => {
+      if (sel.error) { put(body, h("p", { class: "formError" }, sel.error)); put(foot, h("button", { type: "button", class: "btn", onclick: close }, "Close")); return; }
+      if (!sel.files) { put(body, h("p", { class: "muted" }, spinner(14), " Reading GGUF files…")); put(foot); return; }
+      const files = sel.files.files, models = files.filter(f => !f.mmproj && !f.error), projs = files.filter(f => f.mmproj && !f.error);
+      const r = state.run || {}, m = state.hf.machine;
+      const needPort = !(r.docker && r.docker.in_container && r.docker.network);
+      if (!models.length) {
+        put(body, h("p", {}, "No GGUF model file was downloaded for this repository. llama.cpp needs a GGUF file: open the model from the index and download one of its GGUF builds."));
+        put(foot, h("button", { type: "button", class: "btn", onclick: close }, "Close"), h("button", { type: "button", class: "btn primary", onclick: () => { close(); openRepo(repo); } }, "Find GGUF builds"));
+        return;
+      }
+      const chosen = models.find(f => f.path === form.file);
+      const gpu = m && m.gpus.length ? m.gpus.reduce((n, g) => n + g.memory_free, 0) : 0;
+      const select = (key, list, none) => h("select", { class: "input", onchange: e => { form[key] = e.target.value; refresh(); } },
+        none ? h("option", { value: "", selected: !form[key] }, none) : null,
+        list.map(f => h("option", { value: f.path, selected: form[key] === f.path }, `${f.path} · ${fmtBytes(f.size)}${f.ready ? " · ready" : ""}`)));
+      put(body,
+        h("p", { class: "hint" }, "Starts the model in a llama.cpp container on this machine and adds it as a node. A file without System One decision metadata gets a copy with it first, set up the way the original model was trained."),
+        r.docker_error ? h("p", { class: "formError" }, "Docker is not available to the plugin: " + r.docker_error) : null,
+        field("Model file", select("file", models)),
+        projs.length ? field("Vision projector", select("mmproj", projs, "None (text only)"), "Needed only for decisions that include images.") : null,
+        field("Name", bind(form, "name", { class: "input mono", placeholder: "elephant-1" }), "Used for the container (systemone-<name>), the node prefix and the model id, so clients ask for <name>/<name>."),
+        field("Context", bind(form, "context", { class: "input mono", inputmode: "numeric" }), "Tokens of context. 32768 matches what elephant-1 was trained with."),
+        needPort ? field("Host port", bind(form, "port", { class: "input mono", inputmode: "numeric", placeholder: "3334" }), "CLIProxyAPI does not run in a Docker network here, so the model server listens on 127.0.0.1 at this port.") : null,
+        h("div", { class: "specGrid" }, [
+          ["Decision metadata", chosen ? (chosen.ready ? "Already in the file" : `Added to a copy (${fmtBytes(chosen.size)} more disk)`) : "—"],
+          ["Runs on", m && m.gpus.length ? `GPU · ${fmtBytes(gpu)} free now` : "CPU (no NVIDIA GPU found)"],
+          ["Image", m && m.gpus.length ? "ghcr.io/ggml-org/llama.cpp:server-cuda" : "ghcr.io/ggml-org/llama.cpp:server"],
+        ].map(([k, v]) => h("div", { class: "specRow" }, h("span", { class: "specLabel" }, k), h("span", { class: "specValue" }, v)))),
+        chosen && gpu && chosen.size * 1.1 > gpu ? h("p", { class: "hint bad" }, `The GPU has ${fmtBytes(gpu)} free and this file is ${fmtBytes(chosen.size)}. Stop another model first or pick a smaller quantization, or loading may fail.`) : null);
+      put(foot, h("button", { type: "button", class: "btn", onclick: close }, "Cancel"),
+        h("button", { type: "button", class: "btn primary", disabled: sel.busy || !!r.docker_error, onclick: async () => {
+          sel.busy = true; refresh();
+          try {
+            const job = await call("POST", API + "/run/start", { repo, file: form.file, mmproj: form.mmproj, name: form.name.trim(), context: +form.context || 0, port: +form.port || 0 });
+            await addRunnerNode(job.name, job.url);
+            toast("Setting up " + job.name + "; it is added as a node", true); close(); render(); loadHF(false);
+          } catch (e) { toast(e.message); sel.busy = false; refresh(); }
+        } }, sel.busy ? spinner(14) : null, "Install and run"));
+    });
+  call("POST", API + "/run/files", { repo })
+    .then(d => {
+      sel.files = d;
+      const [model, proj] = [pickQuant(d.files.filter(f => !f.mmproj).map(f => f.path))[0], pickQuant(d.files.filter(f => f.mmproj).map(f => f.path))[0]];
+      form.file = model || ""; form.mmproj = proj || "";
+    })
+    .catch(e => { sel.error = e.message; })
+    .finally(() => { if (sheet.isOpen()) sheet.refresh(); });
+}
+
 // openRepo lists a model's files so the user can pick what to download, with sizes against free disk space.
 function openRepo(repo, info) {
   const sel = { files: null, error: "", picks: new Set(), busy: false };
@@ -1206,10 +1393,17 @@ function openRepo(repo, info) {
         ["Memory to run", info && info.params ? `~${fmtBytes(need(info.params))} at ${precisionOf()[1]} · ${fitOf(info.params)[0]}` : `~${fmtBytes(repoSize * 1.2)} (from file size)`],
       ];
       const allOn = files.every(f => sel.picks.has(f.path));
+      const hasGGUF = files.some(f => isGGUF(f.path));
       put(body, 
         h("div", { class: "specGrid" }, specs.map(([k, v]) => h("div", { class: "specRow" }, h("span", { class: "specLabel" }, k), h("span", { class: "specValue" }, v)))),
         short ? h("p", { class: "formError" }, `Not enough disk space: ${fmtBytes(todo)} still to download but only ${fmtBytes(m.disk_free)} free.`) : null,
-        h("p", { class: "hint" }, `Files are saved in ${sel.files.path}. Running the model needs a System One server, for example vLLM, pointed at this folder. Then add that server as a node.`),
+        h("p", { class: "hint" }, `Files are saved in ${sel.files.path}. `, hasGGUF
+          ? `This is a GGUF build, so after the download click Run under Downloaded models to start it with llama.cpp. The ${precisionOf()[1]} file is selected to match the Precision switch.`
+          : "llama.cpp runs GGUF files only, and this repository has none. Download one of its GGUF builds below instead, or run these files on the model's own server and add it as a node."),
+        hasGGUF ? null : h("div", { class: "field" }, h("label", {}, "GGUF builds on Hugging Face"),
+          !sel.builds ? h("p", { class: "muted" }, spinner(14), " Searching…")
+            : !sel.builds.length ? h("p", { class: "hint" }, sel.buildsError || "No GGUF build found.")
+            : h("div", { class: "row wrap" }, sel.builds.map(b => h("button", { type: "button", class: "btn sm", onclick: () => openRepo(b) }, b)))),
         h("div", { class: "tableWrap xscroll" }, h("table", { class: "table" },
           h("thead", {}, h("tr", {},
             h("th", {}, h("input", { type: "checkbox", checked: allOn, "aria-label": "Select all files", onchange: e => { files.forEach(f => e.target.checked ? sel.picks.add(f.path) : sel.picks.delete(f.path)); refresh(); } })),
@@ -1229,7 +1423,14 @@ function openRepo(repo, info) {
         } }, sel.busy ? spinner(14) : icon("download", 14), !picked.length ? "Select files" : !todo ? "Already downloaded" : "Download " + fmtBytes(todo)));
     });
   call("POST", API + "/hf/files", { repo })
-    .then(d => { sel.files = d; d.files.forEach(f => sel.picks.add(f.path)); })
+    .then(d => {
+      sel.files = d;
+      if (!d.files.some(f => isGGUF(f.path))) {
+        d.files.forEach(f => sel.picks.add(f.path));
+        call("POST", API + "/hf/gguf", { repo }).then(b => { sel.builds = b.repos; }, e => { sel.builds = []; sel.buildsError = e.message; })
+          .finally(() => { if (sheet.isOpen()) sheet.refresh(); });
+      } else pickQuant(d.files.map(f => f.path)).forEach(p => sel.picks.add(p));
+    })
     .catch(e => { sel.error = e.message; })
     .finally(() => { if (sheet.isOpen()) sheet.refresh(); });
 }

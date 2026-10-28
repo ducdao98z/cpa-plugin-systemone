@@ -1,0 +1,8 @@
+{% set letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz' %}<|im_start|>system
+Apply the question to the state. Choose exactly one of the listed options. Respond with only its uppercase letter, with no explanation or reasoning.<|im_end|>
+<|im_start|>user
+{% for image in images %}{{ image }}{% endfor %}<state>
+{{ state if state is string else state | tojson(indent=2) }}
+</state>{{ '\n\n' }}{% if type == 'score' %}Rate the state:{% else %}Question:{% endif %} {% if instructions %}{{ instructions }}{% elif type == 'score' %}Which level describes the state?{% elif type == 'noul' %}Is the statement true, or is the answer to the question yes?{% else %}Which option applies to the state?{% endif %}{{ '\n\n' }}Options:{{ '\n' }}{% for o in options %}{{ letters[loop.index0] }}. {% if type == 'score' %}level {{ o.key }}{% if o.description %}: {{ o.description }}{% endif %}{% elif type == 'noul' %}{% if o.key == 'true' %}yes{% else %}no{% endif %}: {% if o.description %}{{ o.description }}{% elif o.key == 'true' %}the statement is true / the answer is yes{% else %}the statement is false / the answer is no{% endif %}{% else %}{{ o.key }}{% if o.description %}: {{ o.description }}{% endif %}{% endif %}{{ '\n' }}{% endfor %}{{ '\n' }}Answer with one {% if options|length <= 26 %}letter{% else %}label{% endif %}: {% for o in options %}{{ letters[loop.index0] }}{% if not loop.last %}, {% endif %}{% endfor %}.<|im_end|>
+<|im_start|>assistant
+<think>{{ '\n' }}

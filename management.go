@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	_ "embed"
 	"encoding/json"
 	"net/http"
@@ -50,9 +51,16 @@ func managementRegistration() map[string]any {
 			{Method: http.MethodPost, Path: managementBase + "/hf/download", Description: "Starts downloading a Hugging Face model, or some of its files, into models-dir. An interrupted download continues where it stopped."},
 			{Method: http.MethodPost, Path: managementBase + "/hf/cancel", Description: "Stops a running download. The part already downloaded is kept."},
 			{Method: http.MethodPost, Path: managementBase + "/hf/delete", Description: "Deletes a downloaded model from models-dir."},
+			{Method: http.MethodPost, Path: managementBase + "/hf/gguf", Description: "Lists the GGUF conversions of a model on Hugging Face, which llama.cpp can run."},
+			{Method: http.MethodGet, Path: managementBase + "/run/status", Description: "Shows whether Docker is reachable, the model servers the plugin started and the progress of the ones being set up."},
+			{Method: http.MethodPost, Path: managementBase + "/run/files", Description: "Lists the downloaded GGUF files of a model and whether they already carry System One decision metadata."},
+			{Method: http.MethodPost, Path: managementBase + "/run/start", Description: "Installs and starts a downloaded GGUF model in a llama.cpp container: adds decision metadata when missing, pulls the image if needed and waits until the model is loaded."},
+			{Method: http.MethodPost, Path: managementBase + "/run/action", Description: "Stops, starts, restarts or removes a model server the plugin started."},
+			{Method: http.MethodPost, Path: managementBase + "/run/logs", Description: "Returns the last lines a model server printed."},
+			{Method: http.MethodGet, Path: managementBase + "/hf/dirs", Description: "Lists the subfolders of a folder (?path=, models-dir when empty) so the page can pick where models are saved, and says whether it can be written to."},
 		},
 		"resources": []resourceRoute{
-			{Path: uiResourcePath, Menu: displayName, Description: "Add System One decision servers and test them, and download decision models from Hugging Face."},
+			{Path: uiResourcePath, Menu: displayName, Description: "Add System One decision servers and test them, and download decision models from Hugging Face and run them with llama.cpp."},
 		},
 	}
 }
@@ -96,6 +104,9 @@ func handleManagement(cfg pluginConfig, req pluginapi.ManagementRequest, callbac
 	}
 	if strings.HasPrefix(path, managementBase+"/hf/") {
 		return handleHF(cfg, path, req)
+	}
+	if strings.HasPrefix(path, managementBase+"/run/") {
+		return handleRun(cfg, path, req)
 	}
 
 	var body nodeRequest
@@ -233,6 +244,8 @@ func handleHF(cfg pluginConfig, path string, req pluginapi.ManagementRequest) pl
 		return jsonResponse(http.StatusOK, out)
 	case managementBase + "/hf/machine":
 		return jsonResponse(http.StatusOK, machine(cfg))
+	case managementBase + "/hf/dirs":
+		return jsonResponse(http.StatusOK, listDirs(cfg, req.Query.Get("path")))
 	case managementBase + "/hf/index":
 		generated, models, errIndex := jevIndex(cfg.HFToken, req.Query.Get("refresh") != "")
 		if errIndex != nil {
@@ -246,6 +259,12 @@ func handleHF(cfg pluginConfig, path string, req pluginapi.ManagementRequest) pl
 		return jsonResponse(http.StatusBadRequest, map[string]any{"error": "a valid repo (owner/name) is required"})
 	}
 	switch path {
+	case managementBase + "/hf/gguf":
+		builds, errBuilds := ggufBuilds(cfg.HFToken, body.Repo)
+		if errBuilds != nil {
+			return jsonResponse(http.StatusBadGateway, map[string]any{"error": errBuilds.Error()})
+		}
+		return jsonResponse(http.StatusOK, map[string]any{"repos": builds})
 	case managementBase + "/hf/files":
 		files, errList := listRepoFiles(cfg.HFToken, body.Repo)
 		if errList != nil {
@@ -270,6 +289,60 @@ func handleHF(cfg pluginConfig, path string, req pluginapi.ManagementRequest) pl
 			return jsonResponse(http.StatusBadRequest, map[string]any{"error": errDelete.Error()})
 		}
 		return jsonResponse(http.StatusOK, map[string]any{"deleted": true})
+	}
+	return jsonResponse(http.StatusNotFound, map[string]any{"error": "unknown route"})
+}
+
+func handleRun(cfg pluginConfig, path string, req pluginapi.ManagementRequest) pluginapi.ManagementResponse {
+	ctx := context.Background()
+	if path == managementBase+"/run/status" {
+		out := map[string]any{"jobs": jobList(), "runners": []runner{}}
+		env, errEnv := currentDockerEnv(ctx)
+		if errEnv != nil {
+			out["docker_error"] = errEnv.Error()
+			return jsonResponse(http.StatusOK, out)
+		}
+		out["docker"] = env
+		if runners, errList := listRunners(ctx); errList != nil {
+			out["docker_error"] = errList.Error()
+		} else {
+			out["runners"] = runners
+		}
+		return jsonResponse(http.StatusOK, out)
+	}
+	var body struct {
+		runRequest
+		Action string `json:"action"`
+	}
+	if errUnmarshal := json.Unmarshal(req.Body, &body); errUnmarshal != nil {
+		return jsonResponse(http.StatusBadRequest, map[string]any{"error": "invalid JSON body"})
+	}
+	switch path {
+	case managementBase + "/run/files":
+		if !validRepo(body.Repo) {
+			return jsonResponse(http.StatusBadRequest, map[string]any{"error": "a valid repo (owner/name) is required"})
+		}
+		return jsonResponse(http.StatusOK, map[string]any{"files": localGGUF(cfg, body.Repo), "path": repoDir(cfg, body.Repo)})
+	case managementBase + "/run/start":
+		job, errStart := startRunner(cfg, body.runRequest)
+		if errStart != nil {
+			return jsonResponse(http.StatusBadRequest, map[string]any{"error": errStart.Error()})
+		}
+		return jsonResponse(http.StatusOK, job)
+	case managementBase + "/run/action":
+		if errAction := runnerAction(ctx, body.Name, body.Action); errAction != nil {
+			return jsonResponse(http.StatusBadRequest, map[string]any{"error": errAction.Error()})
+		}
+		return jsonResponse(http.StatusOK, map[string]any{"ok": true})
+	case managementBase + "/run/logs":
+		if !runnerName.MatchString(body.Name) {
+			return jsonResponse(http.StatusBadRequest, map[string]any{"error": "invalid model name"})
+		}
+		logs, errLogs := runnerLogs(ctx, runnerPrefix+body.Name, 200)
+		if errLogs != nil {
+			return jsonResponse(http.StatusBadGateway, map[string]any{"error": errLogs.Error()})
+		}
+		return jsonResponse(http.StatusOK, map[string]any{"logs": logs})
 	}
 	return jsonResponse(http.StatusNotFound, map[string]any{"error": "unknown route"})
 }
