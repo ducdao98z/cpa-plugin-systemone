@@ -82,6 +82,15 @@ func TestHostPath(t *testing.T) {
 			t.Errorf("hostPath(%s) = %q, %v; want %q", in, got, errHost, want)
 		}
 	}
+	for in, want := range map[string]string{
+		"/data/models/a":          "/CLIProxyAPI/plugins/data/models/a",
+		"/srv/cliproxy/plugins/x": "/CLIProxyAPI/plugins/x",
+		"/srv/cliproxy/pluginsX":  "",
+	} {
+		if got, _ := containerPath(env, in); got != want {
+			t.Errorf("containerPath(%s) = %q; want %q", in, got, want)
+		}
+	}
 }
 
 func TestDemuxLogs(t *testing.T) {

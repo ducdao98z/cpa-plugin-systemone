@@ -150,7 +150,7 @@ func hostPath(env dockerEnv, p string) (string, error) {
 	}
 	best := mountPoint{}
 	for _, m := range env.Mounts {
-		if (abs == m.Destination || strings.HasPrefix(abs, strings.TrimSuffix(m.Destination, "/")+"/")) && len(m.Destination) > len(best.Destination) {
+		if under(abs, m.Destination) && len(m.Destination) > len(best.Destination) {
 			best = m
 		}
 	}
@@ -158,6 +158,25 @@ func hostPath(env dockerEnv, p string) (string, error) {
 		return "", fmt.Errorf("%s is not on a folder mounted from the host, so a model container cannot see it. Choose a model folder under one of CLIProxyAPI's mounts", abs)
 	}
 	return best.Source + strings.TrimPrefix(abs, best.Destination), nil
+}
+
+// containerPath is the reverse of hostPath: where a host path shows up inside CLIProxyAPI's container.
+func containerPath(env dockerEnv, p string) (string, bool) {
+	best := mountPoint{}
+	for _, m := range env.Mounts {
+		if under(p, m.Source) && len(m.Source) > len(best.Source) {
+			best = m
+		}
+	}
+	if best.Source == "" {
+		return "", false
+	}
+	return best.Destination + strings.TrimPrefix(p, best.Source), true
+}
+
+// under says whether path p is root or inside it.
+func under(p, root string) bool {
+	return p == root || strings.HasPrefix(p, strings.TrimSuffix(root, "/")+"/")
 }
 
 // ---------- decision settings of the original model ----------

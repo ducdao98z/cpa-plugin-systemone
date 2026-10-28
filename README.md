@@ -12,7 +12,8 @@ local model server (e.g. Winnow 12B) or a hosted lane (OpenCode, OpenRouter, v1m
 - A **Hugging Face** tab that lists the decision models of the
   [Jev Decision Index](https://huggingface.co/spaces/multimodalart/jev-decision-index), shows the
   machine's CPU, memory, GPU and free disk next to each model's estimated size, and downloads models
-  into `models-dir` (with an optional Hugging Face token for gated or private models).
+  into `models-dir`. A **Settings** tab holds the Hugging Face token (for gated or private models)
+  and the model folder.
 
 Requires CLIProxyAPI v8 with plugins enabled. Streaming is not supported (decisions are a single JSON response).
 
@@ -118,17 +119,21 @@ when a key is set).
 Saving writes `plugins.configs.systemone.nodes` through `/v8/management/config`; the plugin reloads
 automatically.
 
+### Settings tab
+
+- Hugging Face token: saved as `huggingface-token`; the page shows which account it belongs to.
+- Model folder: choose where downloads go (`models-dir`) by browsing the folders of the CLIProxyAPI
+  machine. Inside a container the page lists the folders mounted from the host, since only those
+  survive the container and can be handed to a model server. A host path is opened where it is
+  mounted, and a folder outside the mounts is refused.
+
 ### Hugging Face tab
 
 - Machine: CPU, memory (the cgroup limit inside a container), NVIDIA GPUs (via `nvidia-smi`) and free
   disk space in `models-dir`. This is the computer CLIProxyAPI runs on, where models are downloaded.
-- Token: saved as `huggingface-token`; the page shows which account it belongs to.
 - Jev Decision Index: models that publish weights, with rank, parameters, a rough memory estimate
   at the chosen precision (BF16, Q8 or Q4, plus 20%), score, latency and whether they fit the GPU, fit only in RAM or are
   too large. Filters show only the models that fit.
-- Model folder: choose where downloads go (`models-dir`) by browsing the folders of the CLIProxyAPI
-  machine. Inside a container the page lists the folders mounted from the host, since only those
-  survive the container and can be handed to a model server.
 - Download: pick files, compare their size with free disk space (a download that does not fit is
   refused), follow the progress, stop and resume (partial files are kept as `.part`), delete. A
   repository without GGUF files lists its GGUF builds on Hugging Face; in a GGUF repository the file

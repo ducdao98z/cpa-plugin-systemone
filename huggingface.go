@@ -674,6 +674,7 @@ type dirListing struct {
 	Free     uint64   `json:"free"`
 	Dirs     []string `json:"dirs"`
 	Mounts   []string `json:"mounts"`
+	Outside  bool     `json:"outside,omitempty"` // in a container, but not on a folder mounted from the host
 	Error    string   `json:"error,omitempty"`
 }
 
@@ -686,6 +687,24 @@ func listDirs(cfg pluginConfig, path string) dirListing {
 	out := dirListing{Path: path, Dirs: []string{}, Mounts: containerMounts()}
 	if abs, errAbs := filepath.Abs(path); errAbs == nil {
 		out.Path = abs
+	}
+	if len(out.Mounts) > 0 {
+		// A path typed as the host sees it is opened where it is mounted in the container.
+		if _, errStat := os.Stat(out.Path); errStat != nil {
+			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+			if env, errEnv := currentDockerEnv(ctx); errEnv == nil {
+				if p, ok := containerPath(env, out.Path); ok {
+					out.Path = p
+				}
+			}
+			cancel()
+		}
+		out.Outside = true
+		for _, m := range out.Mounts {
+			if under(out.Path, m) {
+				out.Outside = false
+			}
+		}
 	}
 	if parent := filepath.Dir(out.Path); parent != out.Path {
 		out.Parent = parent

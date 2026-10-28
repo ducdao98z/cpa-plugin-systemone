@@ -292,7 +292,7 @@ const ICONS = {
   download: "M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z",
 };
 
-const state = { key: "", keySource: "", tab: storageGet(TAB_STORE) === "hf" ? "hf" : "nodes", loaded: false, error: "",
+const state = { key: "", keySource: "", tab: ["hf", "settings"].includes(storageGet(TAB_STORE)) ? storageGet(TAB_STORE) : "nodes", loaded: false, error: "",
   config: { nodes: [], token: "", dir: "" }, presets: [], checks: {},
   run: null,
   hf: { status: null, machine: null, index: null, indexError: "", q: "", fit: "all", limit: 40,
@@ -555,9 +555,9 @@ function render() {
   ui.meta.textContent = state.loaded
     ? `${plural(nodes.length, "node")} · ${plural(models, "model")} · ${plural(st ? st.local.length : 0, "downloaded model")}`
     : "Loading…";
-  put(ui.tabs, ...[["nodes", "Nodes"], ["hf", "Hugging Face"]].map(([id, label]) =>
+  put(ui.tabs, ...[["nodes", "Nodes"], ["hf", "Hugging Face"], ["settings", "Settings"]].map(([id, label]) =>
     h("button", { type: "button", role: "tab", class: "segment" + (state.tab === id ? " on" : ""), "aria-selected": String(state.tab === id), onclick: () => setTab(id) }, label)));
-  put(ui.body, ...(state.tab === "hf" ? renderHF() : [renderNodes()]));
+  put(ui.body, ...(state.tab === "hf" ? renderHF() : state.tab === "settings" ? [tokenSection(), folderSection()] : [renderNodes()]));
 }
 
 // ---------- modal (core Modal) ----------
@@ -1051,7 +1051,7 @@ function renderHF() {
       tile("GPU", m.gpus.length ? fmtBytes(gpuMem) : "None", m.gpus.length ? m.gpus.map(g => g.name).join(", ") : "No NVIDIA GPU found, so models run on the CPU", m.gpus.length ? "var(--viz-success)" : "var(--amber-color)"),
       tile("Disk free", m.disk_total ? fmtBytes(m.disk_free) : "—", m.disk_total ? `of ${fmtBytes(m.disk_total)} in ${m.disk_path}` : m.disk_path, m.disk_free && m.disk_free < 20 * 2 ** 30 ? "var(--viz-failure)" : "var(--viz-requests)", m.disk_total ? 100 * (1 - m.disk_free / m.disk_total) : undefined)));
   }
-  out.push(tokenSection(), folderSection(), serversSection());
+  out.push(serversSection());
   const rows = downloadRows();
   if (rows.length) out.push(downloadsSection(rows));
   out.push(indexSection());
@@ -1121,6 +1121,7 @@ function pickFolder(start) {
     input.value = cur.path;
     const join = name => cur.path.replace(/[\\/]+$/, "") + (cur.path.includes("\\") ? "\\" : "/") + name;
     const status = cur.error ? h("span", { class: "pill bad", title: cur.error }, "Cannot open")
+      : cur.outside ? h("span", { class: "pill bad" }, "Not mounted from the host, models here are lost when the container restarts")
       : !cur.exists ? h("span", { class: "pill muted" }, "New folder, created on first download")
       : cur.writable ? h("span", { class: "pill" }, "Writable · " + fmtBytes(cur.free) + " free")
       : h("span", { class: "pill bad" }, "Read-only");
@@ -1140,6 +1141,7 @@ function pickFolder(start) {
     const ok = h("button", { type: "button", class: "btn primary", onclick: async () => {
       const path = input.value.trim();
       if (!path) return toast("Enter a folder");
+      if (cur && cur.path === path && cur.outside) return toast("Choose a folder under one of the mounted folders");
       if (cur && cur.path === path && cur.exists && !cur.writable) return toast("This folder is read-only");
       ok.disabled = true;
       try { await saveFolder(path); close(); } catch (e) { toast(e.message); ok.disabled = false; }
